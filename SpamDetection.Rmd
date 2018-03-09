@@ -202,16 +202,7 @@ trainIsSpam = rep(c(TRUE, FALSE),
 
 ```
 
-```{r naive_bayes_model, include=FALSE}
-
-# get all words from traning
-
-bow = unique(unlist(trainMsgWords))
-
-# placeholder vector for counts
-spamWordCounts = rep(0, length(bow))
-
-names(spamWordCounts) = bow
+```{r freq_table, include=FALSE}
 
 computeFreqs <- function(wordsList, spam, bow = unique(unlist(wordsList))) {
    # create a matrix for spam, ham, and log odds
@@ -255,6 +246,7 @@ computeFreqs <- function(wordsList, spam, bow = unique(unlist(wordsList))) {
 
 ```{r naive_bayes_classify, include=FALSE}
 
+# use our frequency and odds table to classify new messages
 computeMsgLLR = function(words, freqTable) 
 {
        # Discards words not in training data.
