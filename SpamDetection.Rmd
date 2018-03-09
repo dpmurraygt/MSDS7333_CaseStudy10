@@ -259,6 +259,110 @@ computeMsgLLR = function(words, freqTable)
     sum(freqTable["absentLogOdds", !present])
 }
 
+testLLR = sapply(testMsgWords, computeMsgLLR, trainTable)
+
+tapply(testLLR, testIsSpam, summary)
+
+pdf("SP_Boxplot.pdf", width = 6, height = 6)
+spamLab = c("ham", "spam")[1 + testIsSpam]
+boxplot(testLLR ~ spamLab, ylab = "Log Likelihood Ratio",
+      #  main = "Log Likelihood Ratio for Randomly Chosen Test Messages",
+        ylim=c(-500, 500))
+dev.off()
+
+typeIErrorRate = 
+function(tau, llrVals, spam)
+{
+  classify = llrVals > tau
+  sum(classify & !spam)/sum(!spam)
+}
+
+typeIErrorRate(0, testLLR,testIsSpam)
+
+typeIErrorRate(-20, testLLR,testIsSpam)
+
+typeIErrorRates = 
+function(llrVals, isSpam) 
+{
+  o = order(llrVals)
+  llrVals =  llrVals[o]
+  isSpam = isSpam[o]
+
+  idx = which(!isSpam)
+  N = length(idx)
+  list(error = (N:1)/N, values = llrVals[idx])
+}
+
+typeIIErrorRates = function(llrVals, isSpam) {
+    
+  o = order(llrVals)
+  llrVals =  llrVals[o]
+  isSpam = isSpam[o]
+    
+    
+  idx = which(isSpam)
+  N = length(idx)
+  list(error = (1:(N))/N, values = llrVals[idx])
+  }  
+
+xI = typeIErrorRates(testLLR, testIsSpam)
+xII = typeIIErrorRates(testLLR, testIsSpam)
+tau01 = round(min(xI$values[xI$error <= 0.01]))
+t2 = max(xII$error[ xII$values < tau01 ])
+
+pdf("LinePlotTypeI+IIErrors.pdf", width = 8, height = 6)
+
+library(RColorBrewer)
+cols = brewer.pal(9, "Set1")[c(3, 4, 5)]
+plot(xII$error ~ xII$values,  type = "l", col = cols[1], lwd = 3,
+     xlim = c(-300, 250), ylim = c(0, 1),
+     xlab = "Log Likelihood Ratio Values", ylab="Error Rate")
+points(xI$error ~ xI$values, type = "l", col = cols[2], lwd = 3)
+legend(x = 50, y = 0.4, fill = c(cols[2], cols[1]),
+       legend = c("Classify Ham as Spam", 
+                  "Classify Spam as Ham"), cex = 0.8,
+       bty = "n")
+abline(h=0.01, col ="grey", lwd = 3, lty = 2)
+text(-250, 0.05, pos = 4, "Type I Error = 0.01", col = cols[2])
+
+mtext(tau01, side = 1, line = 0.5, at = tau01, col = cols[3])
+segments(x0 = tau01, y0 = -.50, x1 = tau01, y1 = t2, 
+         lwd = 2, col = "grey")
+text(tau01 + 20, 0.05, pos = 4,
+     paste("Type II Error = ", round(t2, digits = 2)), 
+     col = cols[1])
+
+dev.off()
+
+k = 5
+numTrain = length(trainMsgWords)
+partK = sample(numTrain)
+tot = k * floor(numTrain/k)
+partK = matrix(partK[1:tot], ncol = k)
+
+testFoldOdds = NULL
+for (i in 1:k) {
+  foldIdx = partK[ , i]
+  trainTabFold = computeFreqs(trainMsgWords[-foldIdx], trainIsSpam[-foldIdx])
+  testFoldOdds = c(testFoldOdds, 
+               sapply(trainMsgWords[ foldIdx ], computeMsgLLR, trainTabFold))
+}
+
+testFoldSpam = NULL
+for (i in 1:k) {
+  foldIdx = partK[ , i]
+  testFoldSpam = c(testFoldSpam, trainIsSpam[foldIdx])
+}
+
+xFoldI = typeIErrorRates(testFoldOdds, testFoldSpam)
+xFoldII = typeIIErrorRates(testFoldOdds, testFoldSpam)
+tauFoldI = round(min(xFoldI$values[xFoldI$error <= 0.01]))
+tFold2 = xFoldII$error[ xFoldII$values < tauFoldI ]
+
+```
+
+
+```{r dtree}
 
 processAttach = function(body, contentType){
 
