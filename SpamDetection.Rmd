@@ -12,7 +12,7 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
 
-```{r load_libs, echo=FALSE}
+```{r load_libs, echo=FALSE, include=FALSE}
 library(magrittr)
 library(dplyr)
 library(tidyr)
@@ -35,8 +35,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```{r get_data, include=FALSE}
 # RSpamData not available in R 3.4.3
-# spamPath = system.file(package = "RSpamData")
-# spamPath = "/Users/nolan/RPackages/RSpamData"spamPath = "."
+
 spamPath <- "Data"
 
 dirNames <- list.files(path = spamPath, full.names = TRUE)
@@ -48,7 +47,7 @@ sapply(dirNames, function(x) length(list.files(x)))
 # pick random emails
 idx = c(1:5, 15, 27, 68, 69, 329, 404, 427, 516, 852, 971)
 
-sampleEmail = sapply(list.files(dirNames[1], full.names = TRUE)[idx], readLines)
+#sampleEmail = sapply(list.files(dirNames[1], full.names = TRUE)[idx], readLines)
 
 # split into header and body
 splitMessage <- function(msg) {
@@ -60,8 +59,8 @@ splitMessage <- function(msg) {
 
 sampleSplit <- lapply(sampleEmail, splitMessage)
 
+# get headers
 headerList = lapply(sampleSplit, function(msg) msg$header)
-
 
 # get boundary id from multi-part email
 
@@ -114,7 +113,6 @@ function(msg, stopWords) {
  words = words[ !( words %in% stopWords) ]
  invisible(words)
 }
-
 
 processAllWords = function(dirName, stopWords)
 {
@@ -363,47 +361,117 @@ tFold2 = xFoldII$error[ xFoldII$values < tauFoldI ]
 
 
 ```{r dtree}
+spamPath <- "Data"
 
+dirNames <- list.files(path = spamPath, full.names = TRUE)
+
+fileNames <- list.files(dirNames[1], full.names = TRUE)
+
+# pick random emails
+idx = c(1:5, 15, 27, 68, 69, 329, 404, 427, 516, 852, 971)
+
+sampleEmail = sapply(list.files(dirNames[1], full.names = TRUE)[idx], readLines)
+
+# split into header and body
+splitMessage <- function(msg) {
+  splitPoint = match("", msg) # find first blank line
+  header = msg[1:(splitPoint-1)] # get header, will use this for attachments
+  body = msg[ -(1:splitPoint) ] # get body
+  return(list(header = header, body = body))
+}
+
+sampleSplit <- lapply(sampleEmail, splitMessage)
+
+# get headers
+headerList = lapply(sampleSplit, function(msg) msg$header)
+
+# get boundary id from multi-part email
+
+getBoundary<- function(header) {
+  boundaryIdx = grep("boundary=", header) # index boundary
+  boundary = gsub('"', "", header[boundaryIdx]) # replace quotes
+  gsub(".*boundary= *([^;]*);?.*", "\\1", boundary) # regexrepl with first group match
+}
+
+processHeader = function(header)
+{
+  header[1] = sub("^From","Top-From:", header[1])
+  
+  headerMat = read.dcf(textConnection(header), all = TRUE)
+  headerVec = unlist(headerMat)
+  
+  dupKeys = sapply(headerMat, function(x) length(unlist(x)))
+  names(headerVec) = rep(colnames(headerMat), dupKeys)
+  
+  return(headerVec)
+}
+
+# pass in body and associated content type list
 processAttach = function(body, contentType){
-
+  # get length of body
   n = length(body)
+  # get boundary given contentType string already extracted
   boundary = getBoundary(contentType)
  
+  # where are starting boundary strings?
   bString = paste("--", boundary, sep = "")
   bStringLocs = which(bString == body)
+  # where is ending boundary string?
   eString = paste("--", boundary, "--", sep = "")
   eStringLoc = which(eString == body)
   
+  # if no ending string use length of body as ending boundary loc
   if (length(eStringLoc) == 0) eStringLoc = n
+  
+  # if beginning boundaries <= 1 then no attachments
+  # take last line of message as last line of body
   if (length(bStringLocs) <= 1) {
     attachLocs = NULL
     msgLastLine = n
+    # tiny little conditional
     if (length(bStringLocs) == 0) bStringLocs = 0
   } else {
+    # else we have attachments, so establish locations
+    # for all attachments - this just uses beginning and end
+    # will get all attachment text
     attachLocs = c(bStringLocs[ -1 ],  eStringLoc)
+    # identify message body last line
     msgLastLine = bStringLocs[2] - 1
   }
   
+  # parse message body
   msg = body[ (bStringLocs[1] + 1) : msgLastLine] 
   if ( eStringLoc < n )
+    # concatenate body and last lines
     msg = c(msg, body[ (eStringLoc + 1) : n ])
   
+  # if we have attachments, parse them
   if ( !is.null(attachLocs) ) {
+    # get length of each attachment
     attachLens = diff(attachLocs, lag = 1) 
+    # pass beginning and ending positions to multivariate apply
     attachTypes = mapply(function(begL, endL) {
+      # select the sections of body identified by attachLens
+      # and find content type
       CTloc = grep("^[Cc]ontent-[Tt]ype", body[ (begL + 1) : (endL - 1)])
+      # if no content type, no MIMEType
       if ( length(CTloc) == 0 ) {
         MIMEType = NA
       } else {
         CTval = body[ begL + CTloc[1] ]
         CTval = gsub('"', "", CTval )
+        # get MIMEType
         MIMEType = sub(" *[Cc]ontent-[Tt]ype: *([^;]*);?.*", "\\1", CTval)   
       }
       return(MIMEType)
-    }, attachLocs[-length(attachLocs)], attachLocs[-1])
+    }, 
+    # pass in attachment locations to mapply
+    attachLocs[-length(attachLocs)], attachLocs[-1])
   }
   
+  # else if no attachments retrurn a list of the message body and no dataframe
   if (is.null(attachLocs)) return(list(body = msg, attachDF = NULL) )
+  # else return a list of the body, and a dataframe detailing the lengths and types of attachments
   return(list(body = msg, 
              attachDF = data.frame(aLen = attachLens, 
                                      aType = unlist(attachTypes),
@@ -471,31 +539,49 @@ processAllEmail = function(dirName, isSpam = FALSE)
   invisible(emailList)
 }
 
+emailStruct <- mapply(processAllEmail, dirNames, isSpam = rep(c(FALSE,TRUE), 3:2))
+emailStruct <- unlist(emailStruct, recursive = FALSE)
+sampleStruct <- emailStruct[idx]
+```
+
+```{r d_tree_features}
+
 isYelling = function(msg) {
   if ( "Subject" %in% names(msg$header) ) {
+    # sub out for only alpha in subject if it exists
      el = gsub("[^[:alpha:]]", "", msg$header["Subject"])
+     # if characters exist after sub
      if (nchar(el) > 0) 
+       # return logical, if entire message is caps, then TRUE else FALSE
         nchar(gsub("[A-Z]", "", el)) < 1
      else 
+       # else if no characters, FALSE
         FALSE
   } else 
+    # else nothing existed so NA
     NA
 }
 
+# calculate percentage caps in the BODY as well
 perCaps =
 function(msg)
 {
+  # collapse body into one big string
   body = paste(msg$body, collapse = "")
 
-       # Return NA if the body of the message is "empty"
+  # Return NA if the body of the message is "empty"
   if(length(body) == 0 || nchar(body) == 0) return(NA)
 
-       # Eliminate non-alpha characters
+  # Eliminate non-alpha characters
   body = gsub("[^[:alpha:]]", "", body)
   capText = gsub("[^A-Z]", "", body)
+  # calculate caps percentage
   100 * nchar(capText)/nchar(body)
 }
 
+sapply(sampleStruct, perCaps, USE.NAMES = FALSE)
+
+# stopped here, create DF of features
 
 createDerivedDF =
 function(email = emailStruct, operations = funcList, 
