@@ -33,7 +33,7 @@ knitr::opts_chunk$set(echo = FALSE)
 #source("src/make.R")
 ```
 
-```{r get_data, include=FALSE}
+```{r bayes_get_data, include=FALSE}
 # RSpamData not available in R 3.4.3
 
 spamPath <- "Data"
@@ -170,7 +170,7 @@ isSpam = rep(c(FALSE, FALSE, FALSE, TRUE, TRUE), numMsgs)
 msgWordsList = unlist(msgWordsList, recursive = FALSE)
 ```
 
-``` {r train_test_split, include=FALSE}
+``` {r bayes_train_test_split, include=FALSE}
 set.seed(418910)
 
 numEmail = length(isSpam)
@@ -200,7 +200,7 @@ trainIsSpam = rep(c(TRUE, FALSE),
 
 ```
 
-```{r freq_table, include=FALSE}
+```{r bayes_freq_table, include=FALSE}
 
 computeFreqs <- function(wordsList, spam, bow = unique(unlist(wordsList))) {
    # create a matrix for spam, ham, and log odds
@@ -242,7 +242,7 @@ computeFreqs <- function(wordsList, spam, bow = unique(unlist(wordsList))) {
 ```
 
 
-```{r naive_bayes_classify, include=FALSE}
+```{r bayes_classify, include=FALSE}
 
 # use our frequency and odds table to classify new messages
 computeMsgLLR = function(words, freqTable) 
@@ -473,9 +473,9 @@ processAttach = function(body, contentType){
   if (is.null(attachLocs)) return(list(body = msg, attachDF = NULL) )
   # else return a list of the body, and a dataframe detailing the lengths and types of attachments
   return(list(body = msg, 
-             attachDF = data.frame(aLen = attachLens, 
-                                     aType = unlist(attachTypes),
-                                     stringsAsFactors = FALSE)))                                
+              attachDF = data.frame(aLen = attachLens, 
+                                    aType = unlist(attachTypes),
+                                    stringsAsFactors = FALSE)))                                
 }                       
 
 
@@ -513,22 +513,27 @@ processAllEmail = function(dirName, isSpam = FALSE)
   bodyList = lapply(eSplit, function(msg) msg$body)
   rm(eSplit)
 
-       # which email have attachments
+  # which email have attachments
   hasAttach = grep("^ *multi", tolower(contentTypes))
 
-       # get summary stats for attachments and the shorter body
+  # get summary stats for attachments and the shorter body
   attList = mapply(processAttach, bodyList[hasAttach], 
                    contentTypes[hasAttach], SIMPLIFY = FALSE)
   
-  bodyList[hasAttach] = lapply(attList, function(attEl) 
-                                           attEl$body)
- 
+  # create a placeholder vector to store each df of attachments for
+  # every email - if no attachment == NULL
   attachInfo = vector("list", length = n )
   attachInfo[ hasAttach ] = lapply(attList, 
                                   function(attEl) attEl$attachDF)
+  
+  # replace body listings with atachments with body from
+  # process attach considering last lines
+  bodyList[hasAttach] = lapply(attList, function(attEl) 
+                                           attEl$body)
  
-       # prepare return structure
+  # prepare return structure as a list of lists
   emailList = mapply(function(header, body, attach, isSpam) {
+                      # return a list of lists for each message we can index into
                        list(isSpam = isSpam, header = header, 
                             body = body, attach = attach)
                      },
@@ -539,12 +544,15 @@ processAllEmail = function(dirName, isSpam = FALSE)
   invisible(emailList)
 }
 
+# this results in a k:v pair for the header (processHeader)
+# a list of lines of the body (splitMessage)
+# a df of attachment types and attachment length (processAttach)
 emailStruct <- mapply(processAllEmail, dirNames, isSpam = rep(c(FALSE,TRUE), 3:2))
 emailStruct <- unlist(emailStruct, recursive = FALSE)
 sampleStruct <- emailStruct[idx]
 ```
 
-```{r d_tree_features}
+```{r d_tree_feature_engineering}
 
 isYelling = function(msg) {
   if ( "Subject" %in% names(msg$header) ) {
@@ -552,10 +560,10 @@ isYelling = function(msg) {
      el = gsub("[^[:alpha:]]", "", msg$header["Subject"])
      # if characters exist after sub
      if (nchar(el) > 0) 
-       # return logical, if entire message is caps, then TRUE else FALSE
+       # return logical TRUE if entire message is caps else FALSE
         nchar(gsub("[A-Z]", "", el)) < 1
      else 
-       # else if no characters, FALSE
+        # else if characters left then FALSE
         FALSE
   } else 
     # else nothing existed so NA
@@ -574,8 +582,9 @@ function(msg)
 
   # Eliminate non-alpha characters
   body = gsub("[^[:alpha:]]", "", body)
+  # get only caps
   capText = gsub("[^A-Z]", "", body)
-  # calculate caps percentage
+  # calculate caps percentage of alpha in the body
   100 * nchar(capText)/nchar(body)
 }
 
@@ -594,7 +603,7 @@ function(email = emailStruct, operations = funcList,
                  v = if(is.function(e)) 
                         sapply(email, e)
                       else 
-                        sapply(email, function(msg) eval(e))
+                        sapply(email, function(msg) eval(e)) # if expression, evaluate it
                  v
          })
 
@@ -603,7 +612,10 @@ function(email = emailStruct, operations = funcList,
    invisible(df)
 }
 
-
+# create a list of functions
+# apply list of functions to email structure
+# make a DF of variables where column is one function
+# and rows are emails, a lot of features below
 funcList = list(
   isSpam =
     expression(msg$isSpam)
@@ -794,6 +806,8 @@ funcList = list(
         NA
     }
   ,
+  
+  # of blanks in subject
   subBlanks =
     function(msg)
     {
@@ -817,6 +831,8 @@ funcList = list(
       return(length(grep(".*@[^[:space:]]+", tmp)) ==  0)
     }
   ,
+  
+  # email end in #?
   numEnd =
     function(msg)
     {
@@ -834,6 +850,8 @@ funcList = list(
       login = strsplit(login, "@")[[1]][1]
       length(grep("[0-9]+$", login)) > 0
     },
+  
+  # subject is caps
   isYelling =
     function(msg)
     {
@@ -845,6 +863,7 @@ funcList = list(
       else
         NA
     },
+  # fwd pct of message
   forwards =
     function(msg)
     {
@@ -855,6 +874,7 @@ funcList = list(
       ans = length(grep("^[[:space:]]*>", x))
       100 * ans / length(x)
     },
+  
   isOrigMsg =
     function(msg)
     {
@@ -864,6 +884,7 @@ funcList = list(
       length(grep("^[^[:alpha:]]*original[^[:alpha:]]+message[^[:alpha:]]*$", 
                   tolower(x) ) ) > 0
     },
+  
   isDear =
     function(msg)
     {
@@ -904,6 +925,7 @@ funcList = list(
     }
 )
 
+
 getMessageRecipients =
   function(header)
   {
@@ -941,18 +963,6 @@ processHeader = function(header)
   return(headerVec)
 }
 
-setupRpart = function(data) {
-  logicalVars = which(sapply(data, is.logical))
-  facVars = lapply(data[ , logicalVars], 
-                   function(x) {
-                      x = as.factor(x)
-                      levels(x) = c("F", "T")
-                      x
-                   })
-  cbind(facVars, data[ , - logicalVars])
-}
-
-
 cleanText =
 function(msg)   {
   tolower(gsub("[[:punct:]0-9[:space:][:blank:]]+", " ", msg))
@@ -970,16 +980,6 @@ function(msg, stopWords) {
  words = words[ !( words %in% stopWords) ]
  invisible(words)
 }
-
-
-
-#OK, so that's all the functions below
-#Variable declarations
-
-#msg[ c(1, 3, 26, 27) ]
-
-#cleanMsg = tolower(gsub("[[:punct:]0-9[:blank:]]+", " ", msg))
-#cleanMsg[ c(1, 3, 26, 27) ]
 
 
 stopWords = stopwords()
@@ -1020,12 +1020,23 @@ numHam = numEmail - numSpam
 ```
 
 
-```{r}
+```{r fit_dtree, include=FALSE}
 #Read in data files
 #Apply the Functions to create the features
 
 
-emailStruct = mapply(processAllEmail, fullDirNames,
+setupRpart = function(data) {
+  logicalVars = which(sapply(data, is.logical))
+  facVars = lapply(data[ , logicalVars], 
+                   function(x) {
+                      x = as.factor(x)
+                      levels(x) = c("F", "T")
+                      x
+                   })
+  cbind(facVars, data[ , - logicalVars])
+}
+
+emailStruct = mapply(processAllEmail, dirNames,
                      isSpam = rep( c(FALSE, TRUE), 3:2))      
 emailStruct = unlist(emailStruct, recursive = FALSE)
 
@@ -1033,19 +1044,15 @@ emailStruct = unlist(emailStruct, recursive = FALSE)
 pC = sapply(emailStruct, perCaps)
 pC2 = sapply(emailStruct, perCaps2)
 
-
 save(emailStruct, file="emailXX.rda")
 
-
 emailDF = createDerivedDF(emailStruct)
-
 emailDFrp = setupRpart(emailDF)
 
-set.seed(418910)
+set.seed(418910)# set seed for reproducibility
 spam = testDF$isSpam == "T"
 numSpam = sum(spam)
 numHam = sum(!spam)
-
 
 testSpamIdx = sample(numSpam, size = floor(numSpam/3))
 testHamIdx = sample(numHam, size = floor(numHam/3))
@@ -1053,11 +1060,13 @@ testHamIdx = sample(numHam, size = floor(numHam/3))
 testDF = 
   rbind( emailDFrp[emailDFrp$isSpam == "T", ][testSpamIdx, ],
          emailDFrp[emailDFrp$isSpam == "F", ][testHamIdx, ] )
+
 trainDF =
   rbind( emailDFrp[emailDFrp$isSpam == "T", ][-testSpamIdx, ], 
          emailDFrp[emailDFrp$isSpam == "F", ][-testHamIdx, ])
 
-
+# here's where we implement caret
+# https://machinelearningmastery.com/tuning-machine-learning-models-using-the-caret-r-package/
 
 errs = sapply(fits, function(preds) {
                       typeI = sum(preds[ !spam ] == "T") / numHam
