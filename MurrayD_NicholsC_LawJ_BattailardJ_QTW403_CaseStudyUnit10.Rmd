@@ -768,9 +768,11 @@ dat.task = makeClassifTask(id = "spam",
                            data = trainDF, 
                            target = "isSpam", 
                            check.data = FALSE)
+
+#https://cran.r-project.org/web/packages/mlr/vignettes/mlr.html
 # using ML
 # Define the model
-resamp = makeResampleDesc("CV", iters = 10L)
+resamp = makeResampleDesc("CV", iters = 10L, stratify = TRUE)
 # Create the grid params
 control.grid = makeTuneControlGrid() 
 ps = makeParamSet(
