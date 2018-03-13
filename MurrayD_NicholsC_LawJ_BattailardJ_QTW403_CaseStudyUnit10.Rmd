@@ -764,12 +764,13 @@ rpFitwGrid <- train(       isSpam ~ .,
 # Create the learner
 lrn = makeLearner("classif.rpart")
 
-dat.task = makeClassifTask(id = "spam", 
+email.clf = makeClassifTask(id = "spam", 
                            data = trainDF, 
                            target = "isSpam", 
                            check.data = FALSE)
-
+email.clf
 #https://cran.r-project.org/web/packages/mlr/vignettes/mlr.html
+# https://mlr-org.github.io/mlr-tutorial/release/html/task/index.html
 # using ML
 # Define the model
 resamp = makeResampleDesc("CV", iters = 10L, stratify = TRUE)
@@ -781,7 +782,7 @@ ps = makeParamSet(
      #makeDiscreteParam("maxdepth", values = c(2, 5, 10)))
       )
 tuned = tuneParams(lrn, 
-                   task = dat.task, 
+                   task = email.clf, 
                    resampling = resamp, 
                    control = control.grid, 
                    par.set = ps, measures = list(fnr, fpr))
