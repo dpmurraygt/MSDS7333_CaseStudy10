@@ -29,6 +29,7 @@ library(tidyr)
 library(ggplot2)
 library(tm)
 library(rpart)
+library(caret)
 ```
 
 ```{r setup, include=FALSE}
@@ -642,12 +643,12 @@ setupRpart = function(data) {
   cbind(facVars, data[ , - logicalVars])
 }
 
-
 save(emailStruct, file="emailXX.rda")
-emailDFrp = setupRpart(emailDF)
+emailDF = setupRpart(emailDF)
 
-set.seed(418910)# set seed for reproducibility
-spam = testDF$isSpam == "T"
+set.seed(418910) # set seed for reproducibility
+
+spam = emailDF$isSpam == "T"
 numSpam = sum(spam)
 numHam = sum(!spam)
 
@@ -655,16 +656,25 @@ testSpamIdx = sample(numSpam, size = floor(numSpam/3))
 testHamIdx = sample(numHam, size = floor(numHam/3))
 
 testDF = 
-  rbind( emailDFrp[emailDFrp$isSpam == "T", ][testSpamIdx, ],
-         emailDFrp[emailDFrp$isSpam == "F", ][testHamIdx, ] )
+  rbind( emailDF[emailDF$isSpam == "T", ][testSpamIdx, ],
+         emailDF[emailDF$isSpam == "F", ][testHamIdx, ] )
 
 trainDF =
-  rbind( emailDFrp[emailDFrp$isSpam == "T", ][-testSpamIdx, ], 
-         emailDFrp[emailDFrp$isSpam == "F", ][-testHamIdx, ])
+  rbind( emailDF[emailDF$isSpam == "T", ][-testSpamIdx, ], 
+         emailDF[emailDF$isSpam == "F", ][-testHamIdx, ])
 
 # here's where we implement caret
 # https://machinelearningmastery.com/tuning-machine-learning-models-using-the-caret-r-package/
 # https://machinelearningmastery.com/feature-selection-with-the-caret-r-package/
+# https://github.com/topepo/caret/blob/master/RegressionTests/Code/rpart.R
+# https://machinelearningmastery.com/compare-models-and-select-the-best-using-the-caret-r-package/
+
+
+rpartFit = rpart(isSpam ~ ., data = trainDF, method = "class")
+
+library(rpart.plot)
+prp(rpartFit, extra=1)
+print(rpartFit)
 
 errs = sapply(fits, function(preds) {
                       typeI = sum(preds[ !spam ] == "T") / numHam
@@ -672,48 +682,37 @@ errs = sapply(fits, function(preds) {
                       c(typeI = typeI, typeII = typeII)
                      })
 
+predictions = predict(rpartFit, newdata = testDF[,names(testDF) !="isSpam"],
+                      type="class")
+
+predsForHam = predictions[testDF$isSpam == "F"]
+summary(predsForHam)
+
+# type 1 error rate (finding spam when none)
+sum(predsForHam=="T")/length(predsForHam)
 
 
+predsForSpam = predictions[testDF$isSpam == "T"]
+summary(predsForSpam)
 
-rpartFit = rpart(isSpam ~ ., data = trainDF, method = "class")
-
-
-
-#machine learn it
-
-logRegDetection <- glm(isSpam ~ ., data=emailDF)
-
-summary(logRegDetection)
+# type II error rate (not finding spam)
+sum(predsForSpam == "F")/length(predsForSpam)
+library(MLmetrics)
 
 
+# preProcess(method="bagImpute", trainDF)
 
-#test it
+f1 <- function(data, lev = NULL, model = NULL) {
+  f1_val <- F1_Score(y_pred = data$pred, y_true = data$obs, positive = lev[1])
+  c(F1 = f1_val)
+}
 
-```
+fitControl <- trainControl(method="cv", number=10, summaryFunction = f1)
+rpFit <- train(isSpam ~ ., data=trainDF, method="rpart", trControl = fitControl, na.action = na.omit)
 
-```{r misc_funcs}
-
-hasAttach <- sapply(headerList, function(header) {
-  CTloc = grep("Content-Type", header)
-  if (length(CTloc) == 0) return(FALSE)
-  grepl("multi", tolower(header[CTloc])) 
-})
-
-
-typeIIErrorRates = function(llrVals, isSpam) {
-    
-  o = order(llrVals)
-  llrVals =  llrVals[o]
-  isSpam = isSpam[o]
-    
-    
-  idx = which(isSpam)
-  N = length(idx)
-  list(error = (1:(N))/N, values = llrVals[idx])
-  }  
+varImp(rpFit)
 
 ```
-
 
 ```{r bayes_get_data, include=FALSE}
 # RSpamData not available in R 3.4.3
