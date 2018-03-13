@@ -30,6 +30,7 @@ library(ggplot2)
 library(tm)
 library(rpart)
 library(caret)
+library(mlr)
 ```
 
 ```{r setup, include=FALSE}
@@ -644,11 +645,11 @@ setupRpart = function(data) {
 }
 
 save(emailStruct, file="emailXX.rda")
-emailDF = setupRpart(emailDF)
+emailDFrp = setupRpart(emailDF)
 
 set.seed(418910) # set seed for reproducibility
 
-spam = emailDF$isSpam == "T"
+spam = emailDFrp$isSpam == "T"
 numSpam = sum(spam)
 numHam = sum(!spam)
 
@@ -656,33 +657,36 @@ testSpamIdx = sample(numSpam, size = floor(numSpam/3))
 testHamIdx = sample(numHam, size = floor(numHam/3))
 
 testDF = 
-  rbind( emailDF[emailDF$isSpam == "T", ][testSpamIdx, ],
-         emailDF[emailDF$isSpam == "F", ][testHamIdx, ] )
+  rbind( emailDFrp[emailDFrp$isSpam == "T", ][testSpamIdx, ],
+         emailDFrp[emailDFrp$isSpam == "F", ][testHamIdx, ] )
 
 trainDF =
-  rbind( emailDF[emailDF$isSpam == "T", ][-testSpamIdx, ], 
-         emailDF[emailDF$isSpam == "F", ][-testHamIdx, ])
+  rbind( emailDFrp[emailDFrp$isSpam == "T", ][-testSpamIdx, ], 
+         emailDFrp[emailDFrp$isSpam == "F", ][-testHamIdx, ])
 
 # here's where we implement caret
 # https://machinelearningmastery.com/tuning-machine-learning-models-using-the-caret-r-package/
 # https://machinelearningmastery.com/feature-selection-with-the-caret-r-package/
 # https://github.com/topepo/caret/blob/master/RegressionTests/Code/rpart.R
 # https://machinelearningmastery.com/compare-models-and-select-the-best-using-the-caret-r-package/
+# https://mlr-org.github.io/mlr-tutorial/devel/html/tune/index.html
 
-
-rpartFit = rpart(isSpam ~ ., data = trainDF, method = "class")
+rpartFit = rpart(isSpam ~ ., 
+                 data = trainDF, 
+                 method = "class")
 
 library(rpart.plot)
 prp(rpartFit, extra=1)
 print(rpartFit)
 
-errs = sapply(fits, function(preds) {
-                      typeI = sum(preds[ !spam ] == "T") / numHam
-                      typeII = sum(preds[ spam ] == "F") / numSpam
-                      c(typeI = typeI, typeII = typeII)
-                     })
+#errs = sapply(rpartFit, function(preds) {
+#                      typeI = sum(preds[ !spam ] == "T") / numHam
+#                      typeII = sum(preds[ spam ] == "F") / numSpam
+#                      c(typeI = typeI, typeII = typeII)
+#                     })
 
-predictions = predict(rpartFit, newdata = testDF[,names(testDF) !="isSpam"],
+predictions = predict(rpartFit, 
+                      newdata = testDF[,names(testDF) !="isSpam"],
                       type="class")
 
 predsForHam = predictions[testDF$isSpam == "F"]
@@ -697,22 +701,95 @@ summary(predsForSpam)
 
 # type II error rate (not finding spam)
 sum(predsForSpam == "F")/length(predsForSpam)
+
+# params
+complexityVals <- c(seq(0.00001, 0.1, length=25))
+
+fits = lapply(complexityVals, function(x) {
+  rpartObj = rpart(isSpam ~ ., data=trainDF,
+                   method="class",
+                   control=rpart.control(cp=x))
+  predict(rpartObj,
+          newData = testDF[, names(testDF) != "isSpam"],
+          type= "class")
+})
+
+spam = testDF$isSpam == "T"
+numSpam = sum(spam)
+numHam = sum(!spam)
+
+errs = sapply(fits, function(preds){
+  typeI = sum(preds[!spam] == "T") / numHam
+  typeII = sum(preds[spam] == "F") / numSpam
+  c(typeI = typeI, typeII=typeII)
+})
+
+
 library(MLmetrics)
+# preProc <- preProcess(method="bagImpute", trainDF)
 
-
-# preProcess(method="bagImpute", trainDF)
-
+# set up f1 summary metric
 f1 <- function(data, lev = NULL, model = NULL) {
   f1_val <- F1_Score(y_pred = data$pred, y_true = data$obs, positive = lev[1])
   c(F1 = f1_val)
 }
 
+grid <- expand.grid(cp=c(0.01, 0.02, 0.05, 0.1, 0.5))
+
 fitControl <- trainControl(method="cv", number=10, summaryFunction = f1)
-rpFit <- train(isSpam ~ ., data=trainDF, method="rpart", trControl = fitControl, na.action = na.omit)
+
+rpFit <- train(            isSpam ~ .,
+                           data = trainDF, 
+                           method="rpart",
+                           trControl = fitControl, 
+                           na.action = na.omit,
+                           tuneLength=5)
 
 varImp(rpFit)
+rpFit
+
+
+trainDF$isSpam <- relevel(trainDF$isSpam, "T")
+
+rpFitwGrid <- train(       isSpam ~ .,
+                           data = trainDF, 
+                           method="rpart",
+                           trControl = fitControl, 
+                           na.action = na.omit,
+                           tuneGrid=grid)
+
+
+
+
+# Create the learner
+lrn = makeLearner("classif.rpart")
+
+dat.task = makeClassifTask(id = "spam", 
+                           data = trainDF, 
+                           target = "isSpam", 
+                           check.data = FALSE)
+# using ML
+# Define the model
+resamp = makeResampleDesc("CV", iters = 10L)
+# Create the grid params
+control.grid = makeTuneControlGrid() 
+ps = makeParamSet(
+     makeDiscreteParam("cp", values = c(0.00001, 0.001, 0.01, 0.1)),
+     makeDiscreteParam("minsplit", values = c(1, 5, 10, 15))
+     #makeDiscreteParam("maxdepth", values = c(2, 5, 10)))
+      )
+tuned = tuneParams(lrn, 
+                   task = dat.task, 
+                   resampling = resamp, 
+                   control = control.grid, 
+                   par.set = ps, measures = list(fnr, fpr))
 
 ```
+
+
+
+
+
 
 ```{r bayes_get_data, include=FALSE}
 # RSpamData not available in R 3.4.3
