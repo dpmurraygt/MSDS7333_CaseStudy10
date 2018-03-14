@@ -1,0 +1,24 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+library(scales)
+library(ggthemes)
+library(magrittr)
+
+
+```
+
+#This assumes emailDFrp is built and ready to go...
+
+```{r fig.height=8, fig.width=8}
+AsVector<-emailDF[,c(2:30)]
+cormat<- (round(cor(AsVector),2))
+cormat <- reshape::melt(cormat)
+cormat %>% ggplot(aes(x=X1, y=X2, fill=value)) + geom_tile() + theme(legend.position = "bottom", axis.text.x = element_text(angle=90, vjust=-.5))
+
+
+```

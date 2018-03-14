@@ -738,7 +738,7 @@ grid <- expand.grid(cp=c(0.01, 0.02, 0.05, 0.1, 0.5))
 
 fitControl <- trainControl(method="cv", number=10, summaryFunction = f1)
 
-rpFit <- train(            isSpam ~ .,
+rpFit <- caret::train(            isSpam ~ .,
                            data = trainDF, 
                            method="rpart",
                            trControl = fitControl, 
@@ -751,7 +751,7 @@ rpFit
 
 trainDF$isSpam <- relevel(trainDF$isSpam, "T")
 
-rpFitwGrid <- train(       isSpam ~ .,
+rpFitwGrid <- caret::train(       isSpam ~ .,
                            data = trainDF, 
                            method="rpart",
                            trControl = fitControl, 
