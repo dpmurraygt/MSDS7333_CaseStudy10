@@ -39,6 +39,7 @@ library(tm)
 library(rpart)
 library(caret)
 library(mlr)
+library(parallelMap)
 ```
 
 ```{r make, include=FALSE, cache=TRUE, eval=FALSE}
@@ -72,24 +73,9 @@ mosaicplot(table(isSpamLabels, fromNE), color=colM, main="", xlab="", ylab="")
 ```
 
 ```{r fit_dtree, include=FALSE}
-#Read in data files
-#Apply the Functions to create the features
 
-# transform nominals and ordinals to factors with this function
-setupRpart = function(data) {
-  logicalVars = which(sapply(data, is.logical))
-  facVars = lapply(data[ , logicalVars], 
-                   function(x) {
-                      x = as.factor(x)
-                      levels(x) = c("F", "T")
-                      x
-                   })
-  cbind(facVars, data[ , - logicalVars])
-}
-
-emailDFrp = setupRpart(emailDF)
-
-set.seed(418910) # set seed for reproducibility
+# set seed for reproducibility
+set.seed(418910) 
 
 spam = emailDFrp$isSpam == "T"
 numSpam = sum(spam)
@@ -114,12 +100,11 @@ trainDF =
          emailDFrp[emailDFrp$isSpam == "Ham", ][-testHamIdx, ])
 
 # for viz purposes
-trainDF$perCaps <- log(1+trainDF$perCaps)
-trainDF$bodyCharCt <- log(1+trainDF$bodyCharCt)
-testDF$perCaps <- log(1+testDF$perCaps)
-testDF$bodyCharCt <- log(1+testDF$bodyCharCt)
+#trainDF$perCaps <- log(1+trainDF$perCaps)
+#trainDF$bodyCharCt <- log(1+trainDF$bodyCharCt)
+#testDF$perCaps <- log(1+testDF$perCaps)
+#testDF$bodyCharCt <- log(1+testDF$bodyCharCt)
 
-# https://cran.r-project.org/web/packages/mlr/vignettes/mlr.html
 # https://mlr-org.github.io/mlr-tutorial/release/html/task/index.html
 # set up a learning task placeholder
 
@@ -127,26 +112,30 @@ spam.tsk = makeClassifTask(id = "spam",
                            data = trainDF, 
                            target = "isSpam", 
                            check.data = FALSE)
+
 print(spam.tsk)
 getTaskNFeats(spam.tsk)
 getTaskClassLevels(spam.tsk)
 
 # Create the learner from embedded libraries
 spam.lrn = makeLearner("classif.rpart",  # use rpart algorithm, gini index is default for splitting
-                         id ="spam", # give it an id
-                         fix.factors.prediction = TRUE, # control for missing class if any)
+                        id ="spam", # give it an id
+                        fix.factors.prediction = TRUE, # control for missing class if any)
                         predict.type = 'prob') # to get probabilities
 print(spam.lrn)
 # focus on maxdepth, cp and minsplit
-getParamSet(spam.lrn)
+# show defaults
+getParamSet(spam.lrn) # cp = 0.01, minsplit=20, maxdepth=30
 
 # what types of predictions
 spam.lrn$predict.type
 spam.lrn$par.set
 
-# fit with defaults, cp= 0.01
+# fit with defaults, cp = 0.01
 spam.clf <- mlr::train(spam.lrn, spam.tsk)
 splits <- getLearnerModel(spam.clf)
+
+# which variables are most important?
 barchart(sort(splits$variable.importance))
 
 spam.pred <- predict(spam.clf, newdata =  testDF)
@@ -164,15 +153,16 @@ calculateConfusionMatrix(spam.pred, relative = TRUE)
 # calculateConfusionMatrix(spam.pred, relative = TRUE, sums = TRUE)
 
 # viz, decision boundaries for top 2 splitting features
-plotLearnerPrediction(spam.lrn, 
-                      task = email.clf, 
+# log these for better viz
+plotLearnerPrediction(learner = spam.lrn, 
+                      task = spam.tsk, 
                       features=c("perCaps", "bodyCharCt"),
                       pointsize = 1, 
                       err.col="white",
                       bg.cols = c("darkblue","green"))
 
 n = getTaskSize(spam.tsk)
-thresh_plot = generateThreshVsPerfData(spam.pred, measures = list(fpr, fnr, mmce))
+thresh_plot = generateThreshVsPerfData(spam.pred, measures = list(auc, mmce))
 plotThreshVsPerf(thresh_plot)
 
 
@@ -184,26 +174,89 @@ spam.resamp = makeResampleDesc(method = "CV",
 # pull out resampling instance for reproducibility
 spam.resamp.bin = makeResampleInstance(spam.resamp, task=spam.tsk)
 
-spam.base.clf = resample(learner = spam.lrn, 
-                         task = spam.tsk, 
-                         resampling = spam.resamp.bin, 
-                         measures = list(mmce, fpr, fnr), 
-                         models = TRUE) # keep models in getter = TRUE
-                         #extract = FALSE)  # extract only certain data
-
-
-names(spam.base.clf)
-
-# overall performance:
-spam.base.clf$aggr
-performance(spam.base.clf$pred)
-
-# perf for each fold
-spam.base.clf$measures.test
-
-thresh_plot = generateThreshVsPerfData(spam.base.clf$pred, 
-                                       measures = list(fpr, fnr, mmce))
+thresh_plot = generateThreshVsPerfData(spam.pred, 
+                                       measures = list(fpr, mmce))
 plotThreshVsPerf(thresh_plot)
+
+# TUNING 
+# identify search grid params - we'll brute force here based on reasonable vals
+# can also random search over numeric ranges instead
+# test individual params (if range makeNumericParam(param, lower=, upper=))
+spam.ps = makeParamSet(
+                  makeDiscreteParam("cp", values = c(0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5)),
+                  makeDiscreteParam("minsplit", values = c(1, 5, 10, 15, 20, 30, 40)),
+                  makeDiscreteParam("maxdepth", values = c(2, 5, 7, 10, 15, 20, 30, 40))
+                 )
+print(spam.ps)
+# Create the grid and identify algorithm
+
+# optimize for auc
+spam.ctrl = makeTuneControlGrid() 
+
+# launch parallel multicore for tuning
+parallelStart(mode="multicore", cpus = 4)
+
+# tune parameters for our learner, task
+spam.tuned.clf = tuneParams( learner = spam.lrn, 
+                             task = spam.tsk, 
+                             resampling = spam.resamp.bin, # compare to same resampling method!
+                             control = spam.ctrl, 
+                             par.set = spam.ps, 
+                             measures = list(auc))
+parallelStop()
+
+# hyperparam effects
+data <- generateHyperParsEffectData(spam.tuned.clf, 
+                                    partial.dep = TRUE)
+
+# partial dependency plots based on random forest regression
+plotHyperParsEffect(data, x = "iteration", y = "auc.test.mean",
+  plot.type = "line", partial.dep.learn = "regr.randomForest")
+
+plotHyperParsEffect(data, x = "cp", y = "maxdepth", z = "auc.test.mean",
+  plot.type = "heatmap", partial.dep.learn = "regr.randomForest")
+
+plotHyperParsEffect(data, x = "minsplit", y = "maxdepth", z = "auc.test.mean",
+  plot.type = "heatmap", partial.dep.learn = "regr.randomForest")
+
+
+# get optimal hyperparameters for use on test
+spam.opt.lrn <- setHyperPars(spam.lrn, par.vals = spam.tuned.clf$x)
+spam.opt.clf <- mlr::train(spam.opt.lrn, spam.tsk)
+
+# results
+spam.opt.preds <- predict(spam.opt.clf, newdata = testDF)
+spam.preds <- predict(spam.clf, newdata =  testDF)
+
+performance(spam.preds, measures=list(auc, mmce))
+performance(spam.opt.preds, measures=list(auc, mmce))
+
+
+df = generateThreshVsPerfData(list(base = spam.preds, optimized = spam.opt.preds), 
+                              measures = list(fpr, tpr))
+
+# whooped that a**
+plotROCCurves(df)
+qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")
+
+```
+
+```{r dtree_explore, include=FALSE}
+# optimize both fnr and fpr
+#spam.ctrl = makeTuneMultiCritControlGrid()
+
+#library(emoa)
+#spam.tuned.clf = tuneParamsMultiCrit( learner = spam.lrn, 
+#                                      task = spam.tsk, 
+#                                      resampling = spam.resamp.bin, # compare to same resampling method!
+#                                      control = spam.ctrl, 
+#                                      par.set = spam.ps, 
+#                                      measures = list(fnr, fpr))
+
+df <- as.data.frame(trafoOptPath(spam.tuned.clf$opt.path))
+df[df$fnr.test.mean+df$fpr.test.mean == min(df$fnr.test.mean+df$fpr.test.mean),] # use this to fit
+lrn = setHyperPars(makeLearner("classif.rpart"), par.vals = list(cp=0.001, minsplit=5, maxdepth=15))
+
 
 # get a list of preds for each fold
 getRRPredictionList(spam.base.clf)
@@ -215,51 +268,7 @@ head(pred$data)
 spam.base.clf$models
 
 
-# TUNING 
-# identify search grid params - we'll brute force here based on reasonable vals
-# can also random search over numeric ranges instead
-# test individual params (if range makeNumericParam(param, lower=, upper=))
-spam.ps = makeParamSet(
-                  makeDiscreteParam("cp", values = c(0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2)),
-                  makeDiscreteParam("minsplit", values = c(1, 3, 5, 10, 15)),
-                  makeDiscreteParam("maxdepth", values = c(2, 5, 7, 10, 15))
-                 )
-print(spam.ps)
-# Create the grid and identify algorithm
-
-# optimize for fnr, let's optimize both instead
-#spam.ctrl = makeTuneControlGrid() 
-
-#spam.tuned.clf = tuneParams( learner = spam.lrn, 
-#                             task = spam.tsk, 
-#                             resampling = spam.resamp.bin, # compare to same resampling method!
-#                             control = spam.ctrl, 
-#                             par.set = spam.ps, 
-#                             measures = list(fnr, fpr))
-
-# optimize both fnr and fpr
-spam.ctrl = makeTuneMultiCritControlGrid()
-
-library(emoa)
-spam.tuned.clf = tuneParamsMultiCrit( learner = spam.lrn, 
-                                      task = spam.tsk, 
-                                      resampling = spam.resamp.bin, # compare to same resampling method!
-                                      control = spam.ctrl, 
-                                      par.set = spam.ps, 
-                                      measures = list(fnr, fpr))
-
-
-df <- as.data.frame(trafoOptPath(spam.tuned.clf$opt.path))
-df[df$fnr.test.mean+df$fpr.test.mean == min(df$fnr.test.mean+df$fpr.test.mean),] # use this to fit
-lrn = setHyperPars(makeLearner("classif.rpart"), par.vals = list(cp=0.001, minsplit=5, maxdepth=15))
-
-plotTuneMultiCritResult(spam.tuned.clf)
-getDefaultMeasure(email.clf)
-listMeasures(email.clf)
-
-
 ```
-
 
 ```{r nbayes_get_data, include=FALSE}
 # RSpamData not available in R 3.4.3

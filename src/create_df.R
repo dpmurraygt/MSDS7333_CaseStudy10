@@ -399,3 +399,20 @@ createDerivedDF =
 
 # create feature rich df
 emailDF <- createDerivedDF(emailStruct)
+#Read in data files
+#Apply the Functions to create the features
+
+# transform nominals and ordinals to factors with this function
+setupRpart = function(data) {
+  logicalVars = which(sapply(data, is.logical))
+  facVars = lapply(data[ , logicalVars], 
+                   function(x) {
+                     x = as.factor(x)
+                     levels(x) = c("F", "T")
+                     x
+                   })
+  # re-bind data frame with factors
+  cbind(facVars, data[ , - logicalVars])
+}
+
+emailDFrp = setupRpart(emailDF)
