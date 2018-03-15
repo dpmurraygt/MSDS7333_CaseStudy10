@@ -239,6 +239,33 @@ df = generateThreshVsPerfData(list(base = spam.preds, optimized = spam.opt.preds
 plotROCCurves(df)
 qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")
 
+
+
+# try some nested resampling for unbiased errors
+parallelStart(mode="multicore", cpus = 4)
+
+tune.lrn = makeTuneWrapper(learner = spam.lrn,
+                           resampling = spam.resamp, # inner resampling loop
+                           par.set = spam.ps, # parameters to test
+                           control = spam.ctrl, # control
+                           measures = auc,
+                           show.info = FALSE)
+
+# unbiased test outer cross validation
+outer = makeResampleDesc("CV", iters = 3, stratify = TRUE)
+
+r = resample(tune.lrn, 
+             spam.tsk, 
+             resampling = outer, 
+             extract = getTuneResult,
+             measures = auc,
+             show.info = FALSE)
+
+parallelStop()
+getNestedTuneResultsX(r)
+data <- generateHyperParsEffectData(r, partial.dep = TRUE)
+plotHyperParsEffect(data[[1]], x = "iteration", y = "auc.test.mean",
+                    plot.type = "line", partial.dep.learn = "regr.randomForest")
 ```
 
 ```{r dtree_explore, include=FALSE}
