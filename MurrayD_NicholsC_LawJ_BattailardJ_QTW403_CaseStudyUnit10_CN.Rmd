@@ -40,6 +40,8 @@ library(rpart)
 library(caret)
 library(mlr)
 library(parallelMap)
+library(doParallel)
+library(missForest)
 ```
 
 ```{r make, include=FALSE, cache=TRUE, eval=FALSE}
@@ -73,52 +75,54 @@ mosaicplot(table(isSpamLabels, fromNE), color=colM, main="", xlab="", ylab="")
 ```
 
 ```{r fit_dtree, include=FALSE}
-
 # set seed for reproducibility
 set.seed(418910) 
 
-spam = emailDFrp$isSpam == "T"
-numSpam = sum(spam)
-numHam = sum(!spam)
-
-testSpamIdx = sample(numSpam, size = floor(numSpam/3))
-testHamIdx = sample(numHam, size = floor(numHam/3))
-
+# rename vars for better analysis
 emailDFrp$isSpam <- emailDFrp$isSpam %>% 
                       revalue(c("T"="Spam", "F"="Ham")) %>% 
                         relevel("Spam")
 
-emailDFrp$isSpam <- revalue(emailDFrp$isSpam, c("T"="Spam", "F"="Ham")) 
-emailDFrp$isSpam <- relevel(emailDFrp$isSpam, "Spam")
+# get counts
+spam <- emailDFrp$isSpam == "Spam"
+numSpam <- sum(spam)
+numHam <- sum(!spam)
 
-testDF = 
+# 80/20 split, stratified
+testSpamIdx <- sample(numSpam, size = floor(numSpam/5))
+testHamIdx <- sample(numHam, size = floor(numHam/5))
+
+# impute missing vals
+registerDoParallel(cores=4)
+df <- missForest(emailDFrp, 
+                 maxiter=5, 
+                 ntree=25, 
+                 parallelize = c('forests'),
+                 variablewise = TRUE)
+
+emailDFrp <- df$ximp
+
+testDF <- 
   rbind( emailDFrp[emailDFrp$isSpam == "Spam", ][testSpamIdx, ],
          emailDFrp[emailDFrp$isSpam == "Ham", ][testHamIdx, ])
 
-trainDF =
+trainDF <-
   rbind( emailDFrp[emailDFrp$isSpam == "Spam", ][-testSpamIdx, ], 
          emailDFrp[emailDFrp$isSpam == "Ham", ][-testHamIdx, ])
-
-# for viz purposes
-#trainDF$perCaps <- log(1+trainDF$perCaps)
-#trainDF$bodyCharCt <- log(1+trainDF$bodyCharCt)
-#testDF$perCaps <- log(1+testDF$perCaps)
-#testDF$bodyCharCt <- log(1+testDF$bodyCharCt)
 
 # https://mlr-org.github.io/mlr-tutorial/release/html/task/index.html
 # set up a learning task placeholder
 
 spam.tsk = makeClassifTask(id = "spam", 
                            data = trainDF, 
-                           target = "isSpam", 
-                           check.data = FALSE)
+                           target = "isSpam")
 
 print(spam.tsk)
 getTaskNFeats(spam.tsk)
 getTaskClassLevels(spam.tsk)
 
 # Create the learner from embedded libraries
-spam.lrn = makeLearner("classif.rpart",  # use rpart algorithm, gini index is default for splitting
+spam.lrn = makeLearner( cl = "classif.rpart",# use rpart algorithm, gini index is default for splitting
                         id ="spam", # give it an id
                         fix.factors.prediction = TRUE, # control for missing class if any)
                         predict.type = 'prob') # to get probabilities
@@ -136,11 +140,19 @@ spam.clf <- mlr::train(spam.lrn, spam.tsk)
 splits <- getLearnerModel(spam.clf)
 
 # which variables are most important?
-barchart(sort(splits$variable.importance))
+dat <- data.frame(vars=names(splits$variable.importance), 
+                  importance=splits$variable.importance)
+
+ggplot(dat, aes(reorder(vars, importance, sum), importance))+
+    coord_flip()+
+    geom_col()
+
+#barchart(sort(splits$variable.importance))
 
 spam.pred <- predict(spam.clf, newdata =  testDF)
 listMeasures(spam.tsk)
-performance(spam.pred, measures = list(acc, auc, fpr, fnr))
+performance(spam.pred, measures = list(auc, fpr, fnr, mmce))
+
 # get scores
 preds <- as.data.frame(spam.pred$data)
 getPredictionProbabilities(spam.pred) # returns on prob for spam
@@ -150,17 +162,31 @@ getPredictionProbabilities(spam.pred) # returns on prob for spam
 # confusion matrix for default rpart
 calculateConfusionMatrix(spam.pred)
 calculateConfusionMatrix(spam.pred, relative = TRUE)
-# calculateConfusionMatrix(spam.pred, relative = TRUE, sums = TRUE)
 
-# viz, decision boundaries for top 2 splitting features
-# log these for better viz
-plotLearnerPrediction(learner = spam.lrn, 
-                      task = spam.tsk, 
-                      features=c("perCaps", "bodyCharCt"),
-                      pointsize = 1, 
-                      err.col="white",
-                      bg.cols = c("darkblue","green"))
 
+# for viz purposes, log top 2 importance, fit and predict
+trainDF$perCaps <- log(1+trainDF$perCaps)
+trainDF$bodyCharCt <- log(1+trainDF$bodyCharCt)
+
+# obviously a lot of error when just using the top two predictors
+# needs more to be accurate!
+spam.log.tsk = makeClassifTask(id = "spam", 
+                               data = trainDF, 
+                               target = "isSpam")
+
+g <- plotLearnerPrediction(learner = spam.lrn, 
+                           task = spam.log.tsk, 
+                           features=c("perCaps", "bodyCharCt"),
+                           pointsize = 0.5, 
+                           err.col="white",
+                           bg.cols = c("darkblue","green"),
+                           err.size = 0.5,
+                           err.mark="cv")
+
+g+
+  ggtitle('Figure XX: Body Character Count and Percent Capitals')
+
+# what does our optimal threshold look like for our metrics?
 n = getTaskSize(spam.tsk)
 thresh_plot = generateThreshVsPerfData(spam.pred, measures = list(auc, mmce))
 plotThreshVsPerf(thresh_plot)
@@ -172,7 +198,9 @@ spam.resamp = makeResampleDesc(method = "CV",
                                stratify = TRUE)
 
 # pull out resampling instance for reproducibility
-spam.resamp.bin = makeResampleInstance(spam.resamp, task=spam.tsk)
+#spam.resamp.bin = makeResampleInstance(spam.resamp, task=spam.tsk)
+#save(spam.resamp.bin, file ="resampling_binary") # save for future use!
+load("resampling_binary")
 
 thresh_plot = generateThreshVsPerfData(spam.pred, 
                                        measures = list(fpr, mmce))
@@ -232,16 +260,69 @@ performance(spam.preds, measures=list(auc, mmce))
 performance(spam.opt.preds, measures=list(auc, mmce))
 
 
-df = generateThreshVsPerfData(list(base = spam.preds, optimized = spam.opt.preds), 
-                              measures = list(fpr, tpr))
+df = generateThreshVsPerfData(list(base = spam.preds, 
+                                   optimized = spam.opt.preds), 
+                                   measures = list(fpr, tpr))
 
 # whooped that a**
 plotROCCurves(df)
 qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")
 
+```
+
+```{r dtree_explore, include=FALSE}
+# this block is exploration of the mlr package in R
+# optimize both fnr and fpr
+spam.ctrl = makeTuneMultiCritControlGrid()
+
+library(emoa)
+spam.tuned.clf = tuneParamsMultiCrit( learner = spam.lrn, 
+                                      task = spam.tsk, 
+                                      resampling = spam.resamp.bin, # compare to same resampling method!
+                                      control = spam.ctrl, 
+                                      par.set = spam.ps, 
+                                      measures = list(fnr, fpr))
+
+df <- as.data.frame(trafoOptPath(spam.tuned.clf$opt.path))
+df[df$fnr.test.mean+df$fpr.test.mean == min(df$fnr.test.mean+df$fpr.test.mean),] # use this to fit
+lrn = setHyperPars(makeLearner("classif.rpart"), par.vals = list(cp=0.001, minsplit=5, maxdepth=15))
 
 
-# try some nested resampling for unbiased errors
+# get a list of preds for each fold
+getRRPredictionList(spam.base.clf)
+# get all ze data!
+pred <- getRRPredictions(spam.base.clf)
+head(pred$data)
+
+# get individual model fits, turn on models = TRUE in resample()
+spam.base.clf$models
+
+# establish train and test (learning curve here?)
+# 80/20 split works best
+spam.tsk = makeClassifTask(id = "spam", 
+                           data = df$ximp, 
+                           target = "isSpam", 
+                           check.data = FALSE)
+
+spam.lrn = makeLearner("classif.rpart",  # use rpart algorithm, gini index is default for splitting
+                        id ="spam", # give it an id
+                        fix.factors.prediction = TRUE, # control for missing class if any)
+                        predict.type = 'prob') 
+
+r = generateLearningCurveData(
+  learners = spam.lrn,
+  task = spam.tsk,
+  percs = seq(0.1, 1, by = 0.1),
+  measures = list(auc, tpr),
+  resampling = makeResampleDesc(method = "CV", iters = 10, stratify = TRUE),
+  show.info = FALSE)
+
+plotLearningCurve(r)
+
+
+# try some nested resampling for unbiased error assessment
+# on an outer CV, use inner to tune params, find best
+# train model on outer CV splits based on these params and test on outer CV split
 parallelStart(mode="multicore", cpus = 4)
 
 tune.lrn = makeTuneWrapper(learner = spam.lrn,
@@ -262,37 +343,11 @@ r = resample(tune.lrn,
              show.info = FALSE)
 
 parallelStop()
+
 getNestedTuneResultsX(r)
 data <- generateHyperParsEffectData(r, partial.dep = TRUE)
 plotHyperParsEffect(data[[1]], x = "iteration", y = "auc.test.mean",
                     plot.type = "line", partial.dep.learn = "regr.randomForest")
-```
-
-```{r dtree_explore, include=FALSE}
-# optimize both fnr and fpr
-#spam.ctrl = makeTuneMultiCritControlGrid()
-
-#library(emoa)
-#spam.tuned.clf = tuneParamsMultiCrit( learner = spam.lrn, 
-#                                      task = spam.tsk, 
-#                                      resampling = spam.resamp.bin, # compare to same resampling method!
-#                                      control = spam.ctrl, 
-#                                      par.set = spam.ps, 
-#                                      measures = list(fnr, fpr))
-
-df <- as.data.frame(trafoOptPath(spam.tuned.clf$opt.path))
-df[df$fnr.test.mean+df$fpr.test.mean == min(df$fnr.test.mean+df$fpr.test.mean),] # use this to fit
-lrn = setHyperPars(makeLearner("classif.rpart"), par.vals = list(cp=0.001, minsplit=5, maxdepth=15))
-
-
-# get a list of preds for each fold
-getRRPredictionList(spam.base.clf)
-# get all ze data!
-pred <- getRRPredictions(spam.base.clf)
-head(pred$data)
-
-# get individual model fits, turn on models = TRUE in resample()
-spam.base.clf$models
 
 
 ```
