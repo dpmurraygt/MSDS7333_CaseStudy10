@@ -78,12 +78,12 @@ mosaicplot(table(isSpamLabels, fromNE), color=colM, main="", xlab="", ylab="")
 # set seed for reproducibility
 set.seed(418910) 
 
-# rename vars for better analysis
+# rename and relevel vars for better interpretation
 emailDFrp$isSpam <- emailDFrp$isSpam %>% 
                       revalue(c("T"="Spam", "F"="Ham")) %>% 
                         relevel("Spam")
 
-# get counts
+# get counts to prep for train/test split
 spam <- emailDFrp$isSpam == "Spam"
 numSpam <- sum(spam)
 numHam <- sum(!spam)
@@ -92,16 +92,18 @@ numHam <- sum(!spam)
 testSpamIdx <- sample(numSpam, size = floor(numSpam/5))
 testHamIdx <- sample(numHam, size = floor(numHam/5))
 
-# impute missing vals
+# impute missing vals based on forest classification 
+# and regression
 registerDoParallel(cores=4)
 df <- missForest(emailDFrp, 
                  maxiter=5, 
-                 ntree=25, 
+                 ntree=100, 
                  parallelize = c('forests'),
                  variablewise = TRUE)
 
 emailDFrp <- df$ximp
 
+# pull together stratified train and test sets with training 80 pct
 testDF <- 
   rbind( emailDFrp[emailDFrp$isSpam == "Spam", ][testSpamIdx, ],
          emailDFrp[emailDFrp$isSpam == "Ham", ][testHamIdx, ])
@@ -111,8 +113,9 @@ trainDF <-
          emailDFrp[emailDFrp$isSpam == "Ham", ][-testHamIdx, ])
 
 # https://mlr-org.github.io/mlr-tutorial/release/html/task/index.html
-# set up a learning task placeholder
 
+# initiate mlr classification task
+# set up a learning task placeholder
 spam.tsk = makeClassifTask(id = "spam", 
                            data = trainDF, 
                            target = "isSpam")
@@ -127,9 +130,10 @@ spam.lrn = makeLearner( cl = "classif.rpart",# use rpart algorithm, gini index i
                         fix.factors.prediction = TRUE, # control for missing class if any)
                         predict.type = 'prob') # to get probabilities
 print(spam.lrn)
+
 # focus on maxdepth, cp and minsplit
-# show defaults
-getParamSet(spam.lrn) # cp = 0.01, minsplit=20, maxdepth=30
+# show defaults - cp = 0.01, minsplit=20, maxdepth=30
+getParamSet(spam.lrn) 
 
 # what types of predictions
 spam.lrn$predict.type
@@ -138,6 +142,8 @@ spam.lrn$par.set
 # fit with defaults, cp = 0.01
 spam.clf <- mlr::train(spam.lrn, spam.tsk)
 splits <- getLearnerModel(spam.clf)
+# check out CP, default gini index
+summary(splits)
 
 # which variables are most important?
 dat <- data.frame(vars=names(splits$variable.importance), 
@@ -202,9 +208,6 @@ spam.resamp = makeResampleDesc(method = "CV",
 #save(spam.resamp.bin, file ="resampling_binary") # save for future use!
 load("resampling_binary")
 
-thresh_plot = generateThreshVsPerfData(spam.pred, 
-                                       measures = list(fpr, mmce))
-plotThreshVsPerf(thresh_plot)
 
 # TUNING 
 # identify search grid params - we'll brute force here based on reasonable vals
@@ -213,18 +216,22 @@ plotThreshVsPerf(thresh_plot)
 spam.ps = makeParamSet(
                   makeDiscreteParam("cp", values = c(0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5)),
                   makeDiscreteParam("minsplit", values = c(1, 5, 10, 15, 20, 30, 40)),
-                  makeDiscreteParam("maxdepth", values = c(2, 5, 7, 10, 15, 20, 30, 40))
+                  makeDiscreteParam("maxdepth", values = c(2, 5, 7, 10, 15, 20, 30, 40)),
+                  makeDiscreteParam("parms", values = list(gini = list(split = c("gini")), 
+                                                           info = list(split = c("information"))))
                  )
+
 print(spam.ps)
 # Create the grid and identify algorithm
 
-# optimize for auc
+# set up control, no params passed as we are searching
+# over a discrete set of values
 spam.ctrl = makeTuneControlGrid() 
 
 # launch parallel multicore for tuning
 parallelStart(mode="multicore", cpus = 4)
 
-# tune parameters for our learner, task
+# tune parameters for our learner, task, optimize for auc
 spam.tuned.clf = tuneParams( learner = spam.lrn, 
                              task = spam.tsk, 
                              resampling = spam.resamp.bin, # compare to same resampling method!
@@ -309,15 +316,16 @@ spam.lrn = makeLearner("classif.rpart",  # use rpart algorithm, gini index is de
                         fix.factors.prediction = TRUE, # control for missing class if any)
                         predict.type = 'prob') 
 
-r = generateLearningCurveData(
-  learners = spam.lrn,
+r <- generateLearningCurveData(
+  learners = spam.opt.lrn,
   task = spam.tsk,
   percs = seq(0.1, 1, by = 0.1),
-  measures = list(auc, tpr),
-  resampling = makeResampleDesc(method = "CV", iters = 10, stratify = TRUE),
+  measures = list(auc, setAggregation(auc, train.mean)),
+  resampling = makeResampleDesc(method = "CV", iters = 10, stratify = TRUE, predict="both"),
   show.info = FALSE)
 
-plotLearningCurve(r)
+plotLearningCurve(r, facet="learner")
+
 
 
 # try some nested resampling for unbiased error assessment
