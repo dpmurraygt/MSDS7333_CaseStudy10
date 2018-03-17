@@ -19,7 +19,7 @@ section: MSDS 7333-403 - Quantifying the World - Case Study 5 (Unit 10)
 
 #### rpart Model Comparison
 
-We explore the effect of rpart's control parameters on classifying spam emails by fitting a default rpart model and comparing it to a separate, optimized rpart model. We explore four different parameters: complexity penalty (cp), minsplit, maxdepth, and the splitting criteria. Table XX provides a description for each of these parameters. 
+We explore the effect of rpart's control parameters on classifying spam emails by fitting a default rpart model and comparing it to a separate, optimized rpart model. Specifically, we explore four different parameters: complexity penalty (cp), minsplit, maxdepth, and the splitting criteria. Table XX provides a description for each of these parameters. 
 
 Table XX
 cp  - A scaled complexity penalty that ranges from 0 to 1. In a classification setting, cp is compared against the error rate relative to a previous split. Any split that does not decrease the overall lack of fit by cp is not considered.
@@ -30,13 +30,13 @@ maxdepth - The maximum depth of any node of the final tree, with the root node c
 
 splitting criteria - gini or information. Gini utilizes the gini index to optimize split points, information uses entropy and information gain.
 
-Utilizing the full listing of variables in our dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous splits. Applying the first three parameters previously mentioned typically reduces the size of the final tree. This reduction in variance should help with model generalization to the test dataset. 
+Utilizing the full listing of variables in our email dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous splits. Applying the first three parameters previously mentioned typically reduces the size of the final tree. This reduction in variance should help with model generalization to the test dataset. 
 
 While rpart contains other control parameters, they are used primarily for exploratory purposes (xx reference). However, one point of clarification regarding the parameter xval is warranted. The parameter xval allows a user to optimize the cost penalty (cp) for a tree in a k-fold cross-validation setting. Given rpart does not allow for the tuning of multiple parameters simultaneously, we instead rely on the mlr package (xx reference) for cross-validation and tuning. 
 
-We use 80 percent of the data for training and 20 percent for testing. Spam represents roughly 25 percent of the emails in our original dataset. Therefore, we stratify the observations in our train and test datasets to maintain the original spam/ham ratio. For example, of the 20 percent of data held for testing, 25 percent is made up of spam. We do not explore weighting over oversampling procedures in our analysis. 
+We use 80 percent of the email data for training and 20 percent for testing. Spam represents roughly 25 percent of the emails in our original dataset. Therefore, we stratify the observations in our train and test datasets to maintain the original spam/ham ratio. For example, of the 20 percent of data held for testing, 25 percent is made up of spam. We do not explore weighting over oversampling procedures in our analysis. 
 
-Additionally, we seek to maximize the true positive classification rate where "spam" is our positive class. We do this by selecting area under curve (AUC) as our performance metric. A false positive means an important email may end up in spam or deleted. A false negative means the user may experience unfiltered messages that should be in the spam folder. We consider the former situation a more severe model error.
+Additionally, we seek to maximize the true positive classification rate where "spam" is our positive class. We do this by selecting area under the ROC curve (AUC) as our performance metric. A false positive means an important email may end up in spam or deleted. A false negative means the user may experience unfiltered messages that should be in the spam folder. We consider the former situation a more severe model error.
 
 In order to explore the effect of rpart parameters mentioned previously, we first fit an rpart model using all 29 features and default model parameters. Default parameters for rpart consist of a minsplit of 20, a complexity paramer (cp) of 0.01, maxdepth of 30 and the gini index for splitting purposes.
 
@@ -44,20 +44,31 @@ isSpam ~ ., ma
 
 We retain the initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward.
 
-For comparison purposes, an optimized model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. The mean AUC for each model and associated combination of parameters is compared and the model with the highest cross-validated AUC is chosen.
+For comparison purposes, an optimized model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. Each combination of parameters in Table XX below is tested via cross-validation. The mean AUCs for all model and associated parameters are compared and the model with the highest cross-validated AUC is chosen.
 
 table list of discrete vars here
 
-The base model is then subsequently compared to the optimized model given the test data set.
-
-
-
-needed?
-Rcp(T) ≡ R(T) + cp ∗ |T| ∗ R(T1)
-where T1 is the tree with no splits, |T| is the number of splits for a tree, and R is the risk. This scaled version is much more user friendly than the original CART formula (4.1) since it is unit less. A value of cp = 1 will always result in a tree with no splits.
+The base rpart model with default parameters is then subsequently compared to the optimized model given the test data set.
 
 
 ## Results
+
+### Base Model Results
+show model var importance here
+
+show top 2 classification bounds viz
+
+
+### Optimized Model Results
+
+show hyperparam effects viz (iter and heatmaps)
+
+
+### Model Comparisons
+
+conclude
+show performance results
+show ROC curve
 
 ## Conclusions and Future Work
 
@@ -371,8 +382,6 @@ r <- generateLearningCurveData(
   show.info = FALSE)
 
 plotLearningCurve(r, facet="learner")
-
-
 
 # try some nested resampling for unbiased error assessment
 # on an outer CV, use inner to tune params, find best
