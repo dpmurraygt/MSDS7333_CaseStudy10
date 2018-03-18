@@ -16,6 +16,83 @@ section: MSDS 7333-403 - Quantifying the World - Case Study 5 (Unit 10)
 
 ## Methods
 
+### Exploratory Data Analysis
+A preliminary evaluation of the data found missing data in 303 unique rows.  The availability of values for the following predictor variables was incomplete for:
+* subSpamWords
+* subQuesCt
+* subExcCt
+* subBlanks
+* numRec
+* noHost
+* isYelling
+
+```{r fig.height=3.5, fig.width=8.5}
+emailDF2 %>% group_by(isSpam) %>% summarise(Count=n()) %>% mutate(Pct = Count/sum(Count))%>%
+  ggplot(aes(x=isSpam, y=Count, label=comma(Count))) + geom_bar(stat='identity') +  theme_light() + ggtitle("Spam vs. Non-Spam in Dataset") + scale_y_continuous("Count", labels =comma, limits=c(0,7500)) + scale_x_discrete("Is Spam - True or False")  + geom_text(vjust=-0.5)
+
+
+```
+
+Our dataset is unbalanced: divided to 2,371 (26%) observations of Spam, and 6,674 (74%) observations of Non-Spam.  This imbalancce in the dataset could introduce some higher false negative rates in some model types.
+
+```{r fig.height=8, fig.width=8}
+#I'm going to excerpt complete cases only, to deal with the NA's
+emailDF2<-emailDF[complete.cases(emailDF),]
+AsVector<-emailDF2[,c(2:30)]
+cormat<- (round(cor(AsVector),2))
+cormat <- reshape::melt(cormat)
+cormat %>% ggplot(aes(x=X1, y=X2, fill=value)) + geom_tile() + theme(legend.position = "bottom", axis.text.x = element_text(angle=90, vjust=-.5)) + scale_x_discrete("") + scale_y_discrete("") + ggtitle("Correlation between Predictor Variable Pairs")
+
+
+```
+
+Working without the incomplete cases, the correlation matrix reveals several high correlations between predictors:
+* numLines and bodyCharCt
+* isRe and isinReplyTo
+* isWrote and isinReplyTo
+* forwards with isinReplyTo, isRe
+* numAtt with hour, isPGPsigned, and is multipartText
+* isWrote with fowards, isinReplyTo, and isRe
+
+The higher correlation between predictor variables could cause these variables to be collectively overweighted in modeling, as they may not be fully independent from one another.
+
+```{r}
+cormat2<- (round(cor(emailDF2$isSpam, AsVector),2))
+cormat2 <- reshape::melt(cormat2)
+cormat2 %>% ggplot(aes(x=reorder(X2, -value), y=1, fill=value)) + geom_tile() + theme(legend.position = "bottom", axis.text.x = element_text(angle=90, vjust=-.5)) + scale_y_discrete("") + scale_x_discrete("Predictor Variable") + ggtitle("Correlation between Predictor Variables and Spam Classification")
+
+
+```
+At the individual level, the predictors that are mostly highly correlated with a Spam classification are (R>0.25):
+* perCaps
+* perHTML
+* numEnd
+* subSpamWords
+
+Mild negative correlaton exists between the Spam classification and:
+* isRe
+* isinReplyTo
+* forwards
+* isWrote
+
+```{r fig.width=8.5, fig.height=4}
+emailDF2 %>% gather(Predictor, Value, 2:ncol(emailDF2)) %>% 
+  filter(Predictor %in% c("isRe", "numEnd", "subSpamWords", "isInReplyTo", "isWrote")) %>%
+  ggplot(aes(x=isSpam)) + geom_bar() + facet_grid(Value~Predictor) + theme_light() + ggtitle("High Absolute  Boolean Predictor Variables", subtitle = "Y Axis Faceting Shows True or False for Predictor") + scale_y_continuous("Count", labels =comma) + scale_x_discrete("Is Spam - True or False")
+```
+
+As described earlier, we know that the majority of observations in the overall dataset are classified False for the "IsSpam" indicator.  For the three predictors that found a negative Correlation between the predictor and the "IsSpam" classification - isRe, isinReplyTo, and isWrote - nearly all "TRUE" occurrences of isSpam are "FALSE" for the predictor variable.  For the Other two predictor variables - numEnd, and subSpamWords - there are some occurrences of Spam in both TRUE and FALSE cases for the predictor variable, but TRUE cases of the predictor variable have more cases of Spam than not Spam.  
+
+```{r fig.width=8.5, fig.height=4}
+emailDF2 %>% gather(Predictor, Value, 2:ncol(emailDF2)) %>% 
+  filter(Predictor %in% c("forwards",   "perCaps", "perHTML")) %>%
+  ggplot(aes(x=isSpam, y=Value)) + geom_boxplot() + facet_wrap(~Predictor, scales = "free_y", ncol=4) + theme_light() + ggtitle("High Absolute Correlation Continous Predictor Variables") + scale_x_discrete("Is Spam - True or False")
+
+
+```
+Considering the continous predictors with either high negative or positive correlation, we can clarify our view of what might consititute spam.  The predictor variable "forwards" shows a more concentrated distribution of values - mostly from 0-15 for occurrences of Spam versus the full range of 0-100 for Not Spam.  The predictor variable perCaps is different - with Spam cases showing a wider interquartile range of 10-20, versus non-spam cases showing a highly limited interquartile range around 10.  The third continuous variable, perHTML, with a high correlation shows an interquartile range in Spam cases from 0 to 38, versus a very narrow interquartile range for not Spam cases near 0.
+
+Examination of these predictor variables with high and low negative correlations give some perspective to how we should expect the models to split the data on the predictor variables, but we can also expect that some of the lower correlation variables might be involved in the decision of Spam versus Not Spam as well, perhaps providing some finer detailed distinctions between the two classes.
 
 #### rpart Model Comparison
 
