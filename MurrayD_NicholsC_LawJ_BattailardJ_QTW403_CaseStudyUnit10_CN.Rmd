@@ -156,12 +156,23 @@ show performance results
 show ROC curve
 
 ## Conclusions and Future Work
+Supreme Court Justice Potter Stewart is famously credited with the quotation: "But I know it when I see it."[1]  In the context that he was in, Justice Stewart was referencing a film that was thought to be outside the standards of decency accepted in the era of the 1960's.  In the present day, most internet and mobile phone users could also apply it to the subject of spam, or commercial, unsolicited e-mail: they know it when they see it.
+
+The borders of so-called "Spam" e-mail are hard to delineate versus e-mail accepted by users.  It would be easy to set extremely broad borders - that might include sweeping up any commercial e-mail for disposal of, before delivery to the recipient.  It would be easy as well to be too lenient - filtering only the most egregious examples, and leaving the blatant examples of spam to the refuse.
+
+Early efforts at filtering spam were centered on the assumed validity of identity of e-mailers: recipients were expected to "white list" their favored senders, and the senders validity would be assumed valid if the e-mail was shown to be from the same address.  In the last 20 years, many major e-mail handling systems have moved from this type of certainty label, to an ensemble of factors that can be labeled with a final "TRUE" or "FALSE" to the e-mail's spam content indication.  Additional aide is given in creation, or validation of this level by the input predictor set.
+
+Google, via it's gmail product, as well as other providers, have had an ample data set over the past several years.  All have searched for algorithms that reduce the number of false positives (labeled as spam, when it's actually not spam) and false neagetives (labeled as not spam, when it actually is spam).  
+
+The value of intercepting spam communications, across mediums, is also growing.  Most mobile phone numbers have experienced the spoofed-number attack, where a number similar to your own places a call with a robot caller on the opposite end.  A number of smart phone applications are currently trying to address this problem by machine learning.  Likewise, SMS text messaging spam also provides a risk to users of mobile phones.  In both cases, the originator of the call or message is not the number that is listed on the phone.
 
 ## References
 
 https://cran.r-project.org/web/packages/rpart/rpart.pdf
 https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf
 https://stats.stackexchange.com/questions/191842/how-does-the-complexity-parameter-correspond-to-the-number-of-splits-in-cross-va
+[1] https://scholar.google.com/scholar_case?case=15356452945994377133
+[2]
 
 
 ```{r setup, include=FALSE, cache=TRUE}
