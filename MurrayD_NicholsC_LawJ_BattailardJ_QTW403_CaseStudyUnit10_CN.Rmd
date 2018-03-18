@@ -1,4 +1,4 @@
-\---
+---
 title: "Spam Detection: Update this title"
 author: "Dennis Murray, Jared Law, Julien Bataillard, Cory Nichols"
 date: "March 20th, 2018"
