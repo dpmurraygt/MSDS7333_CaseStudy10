@@ -1,3 +1,4 @@
+\
 ---
 title: "Spam Detection: Update this title"
 author: "Dennis Murray, Jared Law, Julien Bataillard, Cory Nichols"
@@ -10,7 +11,15 @@ section: MSDS 7333-403 - Quantifying the World - Case Study 5 (Unit 10)
 
 ## Abstract
 
+The use of email has grown exponentially since the introduction of the world wide web in the late 20th Century.  The amount of email a person receives on a given day can make filtering through it a nightmare for most.  Detection methods to filter out unwanted emails have been around since the late 1990s, and while the algorithms have improved, there is always improvement to be made.  In this paper we work on optimizing R part parameters using minsplit, the complexity penalty (cp), and maxdepth, resulting in better performance versus default parameters after nested cross validation.  The performance metric used is AUC to maximize true positive rate of detection.
+
 ## Introduction
+
+Email is an integral part of our daily lives, from business to personal use.  The overall information spread through the use of email is far and wide, and includes unwanted marketing, phishing and information.  When email was introduced in the late 1980s, it spread rapidly, and so did the ability for companies to market products to email users.  In addition, entities with ulterior motives sprang up, attempting to gain information from those using phishing and social engineering.  These unwanted emails were given the ubiquitous term of “spam”.
+
+Spam filters were introduced not long afterwards, an extension of email filters already in place.  These filters automatically process the incoming messages, applying certain techniques to identify unwanted emails.  Baysean email filters began to be utilized in 1996 but didn’t become popular until much later.  These techniques utilize the probabilities of certain words occurring in regular emails versus spam emails.
+
+In this paper, we expand upon current techniques, working to consider other parameters that can be used to control the recursive partitioning process.  We look at literature to catalogue previous attempts using similar improvements.  We then focus on the optimization of using R part parameters minsplit, maxdepth, and the complexity penalty (cp).  The expansion results in better performance versus default parameters after nested cross validation as shown using the AUC performance metric to maximize the true positive rate of detection.  Our paper will conclude with a discussion of the applications of the improvements in anti-spam email filtering.
 
 ## Literature Review
 
