@@ -50,7 +50,7 @@ emailDFrp$isSpam <- emailDFrp$isSpam %>%
 
 ## Abstract
 
-The use of email has grown exponentially since the introduction of the world wide web in the late 20th century. Today, spam email is ubiquotous on every email platform. Spam detection methods to filter out unwanted emails have originated in the late 1990s and while the algorithms have improved, so have spam avoidance methods. In this paper, we explore rpart; a classification and regression tree package in R. Specifically, we explore the effectiveness of spam classification using rpart and its parameters on a dataset of emails previously classified as spam or ham (valid email). After parameter optimization and cross validation, our rpart model outperforms a rpart model with default parameters.
+The use of email has grown exponentially since the introduction of the world wide web in the late 20th century. Today, spam email is ubiquotous on every email platform. Spam detection methods to filter out unwanted emails have originated in the late 1990s and while the algorithms have improved, so have spam avoidance methods. In this paper, we explore rpart; a classification and regression tree package in R. Specifically, we explore the effectiveness of spam classification using rpart and its hyperparameters on a dataset of emails previously classified as spam or not spam. After parameter optimization, our rpart model outperforms an rpart model using default parameters.
 
 ## Introduction
 
@@ -58,7 +58,7 @@ Email is an integral part of our lives. The overall information spread through t
 
 Spam filters were introduced not long after the introduction of email. These filters automatically process the incoming messages, applying certain techniques to identify unwanted emails.  Bayesian email filters began to be utilized in 1996 but didn’t become popular until much later. These techniques utilize the probabilities of certain words occurring in regular emails versus spam emails.
 
-Today, many different methods exist for spam email classification. We explore a decision tree package in R called rpart. Our objective is to investigate and optimize key hyperparameters used in rpart in order to classify email messages as spam or not spam. Specifically, we analyze two separate decision trees for classifying spam email using the rpart package. We fit one decision tree on training data using default hyperparameters in rpart. After optimizing the minsplit, maxdepth and complexity parameters, we fit a second decision tree on the training data. We compare each model's generalization performance on test email data. Our metric of choice is AUC or the area under the ROC curve. We use this metric to maximize the true positive rate of our classifiers.
+Today, many different methods exist for spam email classification. We explore a decision tree package in R called rpart. Our objective is to investigate and optimize key hyperparameters used in rpart in order to classify email messages as spam or not spam. Specifically, we analyze two separate decision trees for classifying spam email using the rpart package. We fit one decision tree on training data using default hyperparameters in rpart. After optimizing the minsplit, maxdepth and complexity parameters, we fit a second decision tree on the training data. We compare each model's generalization performance on test email data. Our metric for optimization is AUC or the area under the ROC curve. We use this metric to maximize the true positive rate of our classifiers. However, we also consider false negative and positive rates when comparing models to determine if optimization has resulted in a better rpart model.
 
 In the subsquent section, we review research literature to catalogue spam filtering techniques in academics and business. As part of the methods section, we explore a dataset of emails tagged as spam or not spam. We then implement two different decision trees and compare their generalization performance to determine if hyperparameter tuning results in better performance. Our paper concludes with a discussion of the applications of the improvements in anti-spam email filtering.
 
@@ -289,10 +289,10 @@ Additionally, we seek to maximize the true positive classification rate where "s
 
 In order to explore the effect of rpart parameters mentioned previously, we first fit an rpart model using all 29 features and default model parameters. Default parameters for rpart consist of a minsplit of 20, a complexity paramer (cp) of 0.01 and a maxdepth of 30. The Gini index is used as the splitting criterion by default.
 
-We retain this initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward. However, as previously stated, we are interested in the variables rpart considers the most important for splitting. We can easily accomplish this with rpart package methods. Figure XX shows the variables our base model considers the most important for classification.
+We retain this initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward. However, as previously stated, we are interested in the variables rpart considers the most important for splitting. We can easily accomplish this with rpart package methods. Figure 7 shows the variables our base model considers the most important for classification.
 
-```{r fit_dtree_base, include=TRUE}
-
+```{r fit_dtree_base, include=TRUE, fig.width=8.5, fig.height=5}
+set.seed(4)
 
 # get counts to prep for train/test split
 spam <- emailDFrp$isSpam == "Spam"
@@ -354,13 +354,12 @@ dat <- data.frame(vars=names(splits$variable.importance),
 ggplot(dat, aes(reorder(vars, importance, sum), importance))+
     coord_flip()+
     geom_col()+
-    ggtitle("Figure XX: Feature Importance")+
+    ggtitle("Figure 7: rpart Feature Importance")+
     xlab("Feature Splits")
 ```
 
-At the top of the variable importance list is perCaps, or the percentage of capital alpha characters in the body. Importance represents a weighted sum of improvement in split impurity. The perCaps variable overshadows all other variables from an importance standpoint. Indeed, we saw good separation of spam and not spam in the previous section for this variable. We are able to classify 77 percent of all spam messages based on a split value of 13 percent for perCaps. In this case, the model predicts non-spam when a message contains less than 13 percent capitals. Additionally, we see email from addresses ending in numeric (numEnd) and priority provide little value for spam classification. 
-
-Now that we've explored variable importances, we tackle our objective of exploring key parameters and fitting an optimized model. For comparison purposes, an optimized rpart decision tree model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. Each combination of parameters below is tested via cross-validation. The mean AUCs for all models and associated parameters are compared and the model with the highest cross-validated AUC is chosen as our optimized model.
+At the top of the variable importance list is perCaps, or the percentage of capital alpha characters in the body. Importance in Figure 7 is a weighted sum of improvement in impurity for each variable split. The perCaps variable overshadows all other variables from an importance standpoint. Indeed, we saw good separation of spam and not spam in the previous section for this variable. We are able to classify 77 percent of all spam messages based on a split value of 13 percent for perCaps. In this case, the base model predicts non-spam when a message contains less than 13 percent capitals. Additionally, we see email from addresses ending in numeric (numEnd) and priority provide little value for spam classification. 
+Now that we've explored variable importances, we tackle our objective of exploring key parameters and fitting an optimized model. For comparison purposes, an optimized rpart decision tree model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. The mean AUCs for all models and associated parameters are compared and the model with the highest cross-validated AUC is chosen as our optimized model.
 
 Parameter Search Criteria
 *complexity parameter (cp) - 0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5,
@@ -373,10 +372,65 @@ The base rpart model with default parameters is then subsequently compared to th
 ## Results
 
 ### Base Model Results
-Given our base model variable imp
 
-show top 2 classification bounds viz
-confusion matrix
+Our base model lists perCaps as the most important variable to split in Figure 7. Behind it is BodyCharCt, which are the number of characters in the body of the email message. Given these variables are so important, we visually inspect a default rpart model fit on our training data set using perCaps and BodyCharCt.
+
+```{r perCaps_class, include=TRUE}
+
+# for viz purposes, log top 2 importance, fit and predict
+trainDF$perCaps <- log(1+trainDF$perCaps)
+trainDF$bodyCharCt <- log(1+trainDF$bodyCharCt)
+
+# obviously a lot of error when just using the top two predictors
+# needs more to be accurate!
+spam.log.tsk = makeClassifTask(id = "spam", 
+                               data = trainDF, 
+                               target = "isSpam")
+
+g <- plotLearnerPrediction(learner = spam.lrn, 
+                           task = spam.log.tsk, 
+                           features=c("perCaps", "bodyCharCt"),
+                           pointsize = 0.5, 
+                           err.col="white",
+                           bg.cols = c("darkblue","green"),
+                           err.size = 0.5,
+                           err.mark="cv")
+
+g+
+  ggtitle('Figure 8: Body Character Count and Percent Capitals')
+```
+
+We represent values on a log scale in order to provide a clean visualization of classification areas. The observations outlined in white are misclassifications and the color boundaries represent isSpam classes of spam and not spam (ham). The lighter areas of the chart represent lower probabilities for a given class. Obviously the middle of the chart represents an area of major misclassification. Additionally, utilizing only these two variables, our base model struggles with false positive rate. This indicates our model needs more complexity. However, these two variables alone provide for good separation as part of a more complex model.
+
+Thus, we leave it up to rpart and its default parameters to create a decision tree containing 14 splits represented in Figure 9. This is our base model.
+
+```{r tree_plot, include=TRUE, fig.width=8.5, fig.height=5}
+prp(splits, 0, extra=1)
+```
+
+Of particular note is the base model's usage of bodyCharCt. It is used three times in the splitting process. Additionally, we can see quite a bit of misclassification in the model on the training set, particularly a prevalence of false negatives. We utilize the test set to investigate a confusion matrix and model performance in Figure X to address this issue.
+
+```{r confusion_base, include=TRUE}
+
+spam.preds <- predict(spam.clf, newdata =  testDF)
+#listMeasures(spam.tsk)
+#performance(spam.pred, measures = list(auc, fpr, fnr, mmce))
+
+# get scores
+preds <- as.data.frame(spam.preds$data)
+#getPredictionProbabilities(spam.pred) # returns on prob for spam
+# getPredictionResponse(spam.pred)
+# getPredictionTruth()
+
+# confusion matrix for default rpart
+calculateConfusionMatrix(spam.pred)
+
+#calculateConfusionMatrix(spam.pred, relative = TRUE)
+performance(spam.preds, measures=list(auc, mmce, fpr, fnr))
+
+```
+
+In order to address overall misclassification, we include MMCE, or model misclassification error rate in our metrics set. As seen in the confusion matrix, the base model struggles with false negatives. In total, 95 observations in the test set out of 479 spam records are misclassified for a false negative rate of 19.8 percent. MMCE overall is high at almost nine percent. We explore if we can improve on these metrics by optimizing rpart's hyperparameters.
 
 
 ### Optimized Model Results
@@ -418,42 +472,7 @@ https://stats.stackexchange.com/questions/191842/how-does-the-complexity-paramet
 
 ```{r}
 
-spam.pred <- predict(spam.clf, newdata =  testDF)
-listMeasures(spam.tsk)
-performance(spam.pred, measures = list(auc, fpr, fnr, mmce))
 
-# get scores
-preds <- as.data.frame(spam.pred$data)
-getPredictionProbabilities(spam.pred) # returns on prob for spam
-# getPredictionResponse(spam.pred)
-# getPredictionTruth()
-
-# confusion matrix for default rpart
-calculateConfusionMatrix(spam.pred)
-calculateConfusionMatrix(spam.pred, relative = TRUE)
-
-
-# for viz purposes, log top 2 importance, fit and predict
-trainDF$perCaps <- log(1+trainDF$perCaps)
-trainDF$bodyCharCt <- log(1+trainDF$bodyCharCt)
-
-# obviously a lot of error when just using the top two predictors
-# needs more to be accurate!
-spam.log.tsk = makeClassifTask(id = "spam", 
-                               data = trainDF, 
-                               target = "isSpam")
-
-g <- plotLearnerPrediction(learner = spam.lrn, 
-                           task = spam.log.tsk, 
-                           features=c("perCaps", "bodyCharCt"),
-                           pointsize = 0.5, 
-                           err.col="white",
-                           bg.cols = c("darkblue","green"),
-                           err.size = 0.5,
-                           err.mark="cv")
-
-g+
-  ggtitle('Figure XX: Body Character Count and Percent Capitals')
 
 # what does our optimal threshold look like for our metrics?
 n = getTaskSize(spam.tsk)
@@ -526,7 +545,7 @@ spam.opt.clf <- mlr::train(spam.opt.lrn, spam.tsk)
 spam.opt.preds <- predict(spam.opt.clf, newdata = testDF)
 spam.preds <- predict(spam.clf, newdata =  testDF)
 
-performance(spam.preds, measures=list(auc, mmce))
+
 performance(spam.opt.preds, measures=list(auc, mmce))
 
 
