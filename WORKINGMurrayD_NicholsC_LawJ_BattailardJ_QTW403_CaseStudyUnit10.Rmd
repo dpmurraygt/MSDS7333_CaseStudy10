@@ -15,8 +15,9 @@ knitr::opts_knit$set(root.dir = dir)
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-```{r load_libs, include=FALSE, cache=TRUE}
+```{r load_libs, include=FALSE, cache=TRUE, warning=FALSE}
 library(magrittr)
+library(reshape2)
 library(plyr)
 library(dplyr)
 library(tidyr)
@@ -32,14 +33,12 @@ library(scales)
 library(ggthemes)
 library(GGally)
 library(ltm)
+library(rpart.plot)
 ```
 
 ```{r make, include=FALSE, cache=TRUE, eval=FALSE}
 # get and clean data
 source("src/make.R")
-
-# set seed for reproducibility
-set.seed(418910) 
 
 # rename and relevel vars for better interpretation
 emailDFrp$isSpam <- emailDFrp$isSpam %>% 
@@ -103,7 +102,7 @@ emailDFrp %>%
       geom_bar(stat='identity') +  theme_light() + 
       ggtitle("Figure 1: Spam vs. Non-Spam Split") + 
       scale_y_continuous("Count", labels =comma, limits=c(0,7500)) + 
-      scale_x_discrete("Is Spam - True or False")  + 
+      scale_x_discrete("Response Variable Category")  + 
       geom_text(vjust=-0.5)
 ```
 
@@ -113,19 +112,22 @@ Our dataset is unbalanced, with 2,371 (26%) spam emails, and 6,674 (74%) valid e
 
 ```{r impute_df, cache=TRUE, include=FALSE}
 
-
 # impute missing vals based on forest classification and regression
 # set up parallel method
-registerDoParallel(cores=4)
-# impute
-df <- missForest(emailDFrp, 
-                 maxiter=5, 
-                 ntree=50, 
-                 parallelize = c('forests'),
-                 variablewise = TRUE)
-# establish imputed set
-emailDFrp <- df$ximp
+set.seed(4)
 
+# impute, this has been cached but runs each time so we saved output
+# registerDoParallel(cores=4)
+#df <- missForest(emailDFrp, 
+#                 maxiter=5, 
+#                 ntree=50, 
+#                 parallelize = c('forests'),
+#                 variablewise = TRUE)
+
+# establish imputed set
+#emailDFrp <- df$ximp
+
+load('src/emailDFrp')
 
 ```
 
@@ -138,22 +140,24 @@ nums <- sapply(AsVector, is.numeric)
 bools <- sapply(AsVector, is.factor)
 
 # correlation matrix for numerical features
-cormat<- (round(cor(AsVector[, nums]), 2))
-cormat <- reshape::melt(cormat, na.rm=TRUE)
+cormat <- (round(cor(AsVector[, nums]), 2))
+cormat[lower.tri(cormat, diag=TRUE)] <- NA
+cormat <- reshape2::melt(cormat, na.rm = TRUE)
 
-cormat %>% ggplot(aes(x=X1, y=X2, fill=value)) + 
+cormat %>% ggplot(aes(x=Var1, y=Var2, fill=value)) + 
            geom_tile() + 
+           geom_text(aes(Var1, Var2, label = value), color = "white", size = 4)+
            theme(legend.position = "bottom", 
                  axis.text.x = element_text(angle=90, 
                                             vjust=-.5),
-                 legend.text=element_text(size=6)) + 
+                 legend.text=element_text(size=8)) + 
            scale_x_discrete("") + 
            scale_y_discrete("") + 
            ggtitle("Figure 2: Correlation Between Numeric Predictor Variable Pairs")
-
 ```
 
-Working with our imputed dataset, the correlation matrix in figure XX reveals several significant correlations between numerical predictors:
+
+Working with our imputed dataset, the correlation matrix in Figure 2 reveals several significant positive correlations between numerical predictors:
 
 * numLines and bodyCharCt
 * perHTML and bodyChartCt
@@ -161,9 +165,9 @@ Working with our imputed dataset, the correlation matrix in figure XX reveals se
 
 The higher correlation between predictor variables could cause these variables to be collectively overweighted in modeling, as they may not be fully independent from one another. Indeed, bodyChartCt and numLines, the number of distinct lines in the body, are nearly similar variables. However, given we are using recursive partioning with rpart, collinearity issues are usually rectified. The splitting algorithm is a greedy algorithm and will select the most important similar variable. We explore this further in the results section.
 
-Given our dataset contains 16 boolean predictor variables as factors, we display a shortened chi-square matrix in Figure XX. This figure compares factor variables only, as correlation is not an appropriate metric for analyzing nominal relationships.
+Given our dataset contains 16 boolean predictor variables as factors, we display a Fisher's exact p-value matrix in Figure 3. This figure shows the resulting p-values for factor variables only, as correlation is not an appropriate metric for analyzing nominal relationships. Fisher's exact test allows us to nonparametrically examine the association between our categorical variables. It also allows us to account for small numbers of observations for certain variable frequency counts.
 
-```{r chi_sq_cats, include=TRUE, cache=TRUE, fig.height=8, fig.width=8, warning=FALSE}
+```{r chi_sq_cats, include=TRUE, cache=TRUE, fig.height=8, fig.width=8}
 
 # chi-square matrix for categorical features
 
@@ -171,32 +175,35 @@ Dat <- AsVector[, bools]
 
 combos <- combn(ncol(Dat), 2)
 
-chisqres <- adply(combos, 2, function(x) {
-  test <- chisq.test(Dat[, x[1]], Dat[, x[2]])
+fishers <- adply(combos, 2, function(x) {
+  test <- fisher.test(Dat[, x[1]], Dat[, x[2]])
 
   out <- data.frame("Row" = colnames(Dat)[x[1]]
                     , "Column" = colnames(Dat[x[2]])
-                    , "Chi.Square" = round(test$statistic,3)
-                    ,  "df"= test$parameter
-                    ,  "p.value" = round(test$p.value, 3)
+                    , "OddsRatio" = test$estimate
+                    ,  "type"= test$alternative
+                    ,  "p.value" = round(test$p.value,3)
                     )
   return(out)
 
 })  
 
-chisqres %>% 
-  ggplot(aes(x=Row, y=Column, fill=p.value)) + 
+fishers %>% 
+  ggplot(aes(x=Row, y=Column, fill = p.value)) + 
   geom_tile() + 
+  geom_text(aes(Row, Column, label = p.value), color = "white", size = 3)+
   theme(legend.position = "bottom", 
         axis.text.x = element_text(angle=90, vjust=0.5)) +
         scale_y_discrete("") + scale_x_discrete("Predictor Variable") + 
-        ggtitle("Figure 3: Chi Square Independence between Boolean Predictor Variables")
+        ggtitle("Figure 3: Fisher's Exact Test for Boolean Predictor Variables")
 
 ```
 
-Obviously, significant dependence between factor variables exists. This makes logical sense for variables such as isWrote, which indicates if an email is electronically scribed. Since the majority of emails are electronically scribed, we can assume this variable is not as important for predicting spam or ham. Other interesting relationships in Figure X, such as the independence between priority and noHost indicate that these variables may be useful separately for analysis. 
+Lower p-values indicate we reject the null hypothesis of random association. Obviously, significant non-random dependence between factor variables exists. This makes logical sense for variables such as isWrote, which indicates if an email is electronically scribed. Since the majority of emails are electronically scribed, we can assume this variable is not as important for predicting spam or ham. Other interesting relationships such as the independence between priority and noHost indicate that these variables may be useful separately for analysis. 
 
-```{r biser_cor, include=TRUE, fig.height=8, fig.width=8, warning=FALSE}
+In order to be complete, we also visually inspect the biserial correlation between factors and continuous variables. Given our factors are all dichotomous variables, biserial correlation is an appropriate measure to use when exploring relationships with continuous variables. Upon visual inspection, we are able to establish some common sense relationships.
+
+```{r biser_cor, include=TRUE, cache=TRUE, fig.height=8, fig.width=8.5}
 # get all data except response
 Dat <- AsVector
 # identify factor and numeric vars for biserial correlation
@@ -209,19 +216,21 @@ df <- as.data.frame(lapply(nums, function(x) sapply(facs, function(y) biserial.c
 
 # melt it for viz purposes
 df <- reshape::melt(as.matrix(df))
+df$value <- round(df$value, 3)
 
 # plot the relationships
 df %>% 
   ggplot(aes(x=X1, y=X2, fill=value)) + 
   geom_tile() + 
+  geom_text(aes(X1, X2, label = value), color = "white", size = 3)+
   theme(legend.position = "bottom", 
         axis.text.x = element_text(angle=90, vjust=0.5)) +
         scale_y_discrete("") + scale_x_discrete("Predictor Variable") + 
-        ggtitle("Figure 4: Biserial Correlation for Factor and Continuous Variables")
+        ggtitle("Figure 4: Biserial Correlation for Factor and Continuous Predictor Variables")
 
 ```
 
-In order to be complete, we also visually inspect the biserial correlation between factors and continuous variables. Given our factors are all dichotomous variables, biserial correlation is an appropriate measure to use when exploring relationships with continuous variables. Upon visual inspection, we are able to establish some common sense relationships. For example, the number of forwards is negatively correlated with isInReplyTo. This makes sense as replies typically do not contain many forwards. Additionally, the number of attachments is negatively correlated with the boolean multipartText. Again, multipart text messages typically do not contain attachments. In general, we see stronger negative relationships when investigating the correlation between factors and continuous variables.
+For example, the number of forwards is negatively correlated with isInReplyTo. This makes sense as replies typically do not contain many forwards. Additionally, the number of attachments is negatively correlated with the boolean multipartText. Again, multipart text messages typically do not contain attachments. In general, we see stronger negative relationships when investigating the correlation between factors and continuous variables.
 
 In summary, highly correlated predictor variables could be extraneous to our objective of predicting spam. To address predictor and response relationships, we visually inspect both continuous and factor variable relationships with isSpam in the next section. Additionally, we establish variable importances using the rpart package.
 
@@ -402,7 +411,7 @@ g+
 
 We represent values on a log scale in order to provide a clean visualization of classification areas. The observations outlined in white are misclassifications and the color boundaries represent isSpam classes of spam and not spam (ham). The lighter areas of the chart represent lower probabilities for a given class. Obviously the middle of the chart represents an area of major misclassification. Additionally, utilizing only these two variables, our base model struggles with false positive rate. This indicates our model needs more complexity. However, these two variables alone provide for good separation as part of a more complex model.
 
-Thus, we leave it up to rpart and its default parameters to create a decision tree containing 14 splits represented in Figure 9. This is our base model.
+Thus, we leave it up to rpart and its default parameters to create a decision tree containing 14 splits represented in Figure 9. This default fit is considered our base model.
 
 ```{r tree_plot, include=TRUE, fig.width=8.5, fig.height=5}
 prp(splits, 0, extra=1)
@@ -418,12 +427,12 @@ spam.preds <- predict(spam.clf, newdata =  testDF)
 
 # get scores
 preds <- as.data.frame(spam.preds$data)
-#getPredictionProbabilities(spam.pred) # returns on prob for spam
+# getPredictionProbabilities(spam.pred) # returns on prob for spam
 # getPredictionResponse(spam.pred)
 # getPredictionTruth()
 
 # confusion matrix for default rpart
-calculateConfusionMatrix(spam.pred)
+calculateConfusionMatrix(spam.preds)
 
 #calculateConfusionMatrix(spam.pred, relative = TRUE)
 performance(spam.preds, measures=list(auc, mmce, fpr, fnr))
