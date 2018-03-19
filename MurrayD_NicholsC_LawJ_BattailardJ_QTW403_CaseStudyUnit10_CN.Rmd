@@ -242,15 +242,12 @@ Examination of these predictor variables gives some idea of how we should expect
 We explore variable selection and the effect of rpart's control parameters on classifying spam emails by fitting a default rpart model and comparing it to a separate, optimized rpart model. Specifically, we explore four different parameters: complexity penalty (cp), minsplit, maxdepth, and the splitting criteria. Table XX provides a description for each of these parameters. 
 
 Table XX
-cp  - A scaled complexity penalty that ranges from 0 to 1. In a classification setting, cp is compared against the error rate relative to a previous split. Any split that does not decrease the overall lack of fit by cp is not considered.
+* cp  - A scaled complexity penalty that ranges from 0 to 1. In a classification setting, cp is compared against the error rate relative to a previous split. Any split that does not decrease the overall lack of fit by cp is not considered.
+* minsplit - the minimum number of observations that must exist in a node in order for a split to be attempted.
+* maxdepth - The maximum depth of any node of the final tree, with the root node counted as depth 0. 
+* splitting criteria - gini or information. Gini utilizes the gini index to optimize split points, information uses entropy and information gain.
 
-minsplit - the minimum number of observations that must exist in a node in order for a split to be attempted.
-
-maxdepth - The maximum depth of any node of the final tree, with the root node counted as depth 0. 
-
-splitting criteria - gini or information. Gini utilizes the gini index to optimize split points, information uses entropy and information gain.
-
-Utilizing the full listing of variables in our email dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous splits. Applying the first three parameters previously mentioned typically reduces the size of the final tree. This reduction in variance should help with model generalization to the test dataset. 
+Utilizing the full listing of variables in our email dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous variable splits. Applying the first three parameters in table XX typically reduces the size of the final tree. This reduction in variance can help with model generalization to the test dataset. 
 
 While rpart contains other control parameters, they are used primarily for exploratory purposes (xx reference). However, one point of clarification regarding the parameter xval is warranted. The parameter xval allows a user to optimize the cost penalty (cp) for a tree in a k-fold cross-validation setting. Given rpart does not allow for the tuning of multiple parameters simultaneously, we instead rely on the mlr package (xx reference) for cross-validation and tuning. 
 
@@ -258,13 +255,11 @@ We use 80 percent of the email data for training and 20 percent for testing. Spa
 
 Additionally, we seek to maximize the true positive classification rate where "spam" is our positive class. We do this by selecting area under the ROC curve (AUC) as our performance metric. A false positive means an important email may end up in spam or deleted. A false negative means the user may experience unfiltered messages that should be in the spam folder. We consider the former situation a more severe model error.
 
-In order to explore the effect of rpart parameters mentioned previously, we first fit an rpart model using all 29 features and default model parameters. Default parameters for rpart consist of a minsplit of 20, a complexity paramer (cp) of 0.01, maxdepth of 30 and the gini index for splitting purposes.
+In order to explore the effect of rpart parameters mentioned previously, we first fit an rpart model using all 29 features and default model parameters. Default parameters for rpart consist of a minsplit of 20, a complexity paramer (cp) of 0.01 and a maxdepth of 30. The Gini index is used as the splitting criterion by default.
 
-isSpam ~ ., ma
+We retain this initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward. However, as previously stated, we are interested in the variables rpart considers the most important for splitting. We can easily accomplish this with rpart package methods. Figure XX shows the variables our base model considers the most important for classification.
 
-We retain the initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward. However, as previously stated, we are interested in the variables rpart considers the most important for splitting. We can easily accomplish this with package methods. Figure XX shows the most important variables.
-
-```{r fit_dtree, include=TRUE}
+```{r fit_dtree_base, include=TRUE}
 
 
 # get counts to prep for train/test split
@@ -323,26 +318,33 @@ splits <- getLearnerModel(spam.clf)
 dat <- data.frame(vars=names(splits$variable.importance), 
                   importance=splits$variable.importance)
 
+# plot the feature importances
 ggplot(dat, aes(reorder(vars, importance, sum), importance))+
     coord_flip()+
-    geom_col()
+    geom_col()+
+    ggtitle("Figure XX: Feature Importance")+
+    xlab("Feature Splits")
 ```
 
-At the top of the variable importance list is perCaps, or the percentage of capital alpha characters in the body. Importance represents a scaled improvement in model accuracy based on each variable split. We saw good separation of classes in the previous section for this variable and the rpart model uses perCaps for its initial split. Indeed, we are able to classify 77 percent of all spam messages based on a split value of perCaps at 13 percent, where the model predicts non-spam when a message contains less than 13 percent capitals. Additionally, we see email from addresses ending in numeric (numEnd) and priority provide little value for spam classification. 
+At the top of the variable importance list is perCaps, or the percentage of capital alpha characters in the body. Importance represents a weighted sum of improvement in split impurity. The perCaps variable overshadows all other variables from an importance standpoint. Indeed, we saw good separation of spam and not spam in the previous section for this variable. We are able to classify 77 percent of all spam messages based on a split value of 13 percent for perCaps. In this case, the model predicts non-spam when a message contains less than 13 percent capitals. Additionally, we see email from addresses ending in numeric (numEnd) and priority provide little value for spam classification. 
 
-For comparison purposes, an optimized model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. Each combination of parameters in Table XX below is tested via cross-validation. The mean AUCs for all model and associated parameters are compared and the model with the highest cross-validated AUC is chosen.
+Now that we've explored variable importances, we tackle our objective of exploring key parameters and fitting an optimized model. For comparison purposes, an optimized rpart decision tree model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. Each combination of parameters below is tested via cross-validation. The mean AUCs for all models and associated parameters are compared and the model with the highest cross-validated AUC is chosen as our optimized model.
 
-table list of discrete vars here
+Parameter Search Criteria
+*complexity parameter (cp) - 0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5,
+*minsplit - 1, 5, 10, 15, 20, 30, 40,
+*maxdepth - 2, 5, 7, 10, 15, 20, 30, 40
+*splitting criterion - gini, information
 
-The base rpart model with default parameters is then subsequently compared to the optimized model given the test data set.
-
+The base rpart model with default parameters is then subsequently compared to the optimized model given the test data set. We explore model performance and comparisons in the next section.
 
 ## Results
 
 ### Base Model Results
-show model var importance here
+Given our base model variable imp
 
 show top 2 classification bounds viz
+confusion matrix
 
 
 ### Optimized Model Results
@@ -368,8 +370,6 @@ https://stats.stackexchange.com/questions/191842/how-does-the-complexity-paramet
 
 
 ```{r}
-
-#barchart(sort(splits$variable.importance))
 
 spam.pred <- predict(spam.clf, newdata =  testDF)
 listMeasures(spam.tsk)
