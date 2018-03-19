@@ -15,7 +15,7 @@ knitr::opts_knit$set(root.dir = dir)
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-```{r load_libs, include=FALSE, cache=TRUE, warning=FALSE}
+```{r load_libs, include=FALSE, cache=TRUE, warning=FALSE, echo=FALSE}
 library(magrittr)
 library(reshape2)
 library(plyr)
@@ -37,7 +37,7 @@ library(rpart.plot)
 library(knitr)
 ```
 
-```{r make, include=FALSE, cache=TRUE, eval=FALSE}
+```{r make, include=FALSE, cache=TRUE, echo=FALSE}
 # get and clean data
 source("src/make.R")
 
@@ -94,7 +94,8 @@ A preliminary evaluation of the dataset found missing observations in 303 unique
 
 Rather than discard over three percent of the dataset, we undertake imputation using random forest methods for both numeric and categorical predictor variables.
 
-```{r dataset_bal, include=TRUE, fig.height=3.5, fig.width=8.5}
+```{r dataset_bal, include=TRUE, echo=FALSE, fig.height=3.5, fig.width=8.5}
+# get dataset balance
 emailDFrp %>% 
   group_by(isSpam) %>% 
     dplyr::summarise(Count=n()) %>% 
@@ -132,7 +133,7 @@ load('src/emailDFrp')
 
 ```
 
-```{r cor_mat, cache=TRUE, fig.height=8, fig.width=8}
+```{r cor_mat, include=TRUE, cache=TRUE, echo=FALSE, fig.height=8, fig.width=8}
 
 # build correlation matrix
 AsVector <- emailDFrp[, c(2:30)]
@@ -168,7 +169,7 @@ The higher correlation between predictor variables could cause these variables t
 
 Given our dataset contains 16 boolean predictor variables as factors, we display a Fisher's exact p-value matrix in Figure 3. This figure shows the resulting p-values for factor variables only, as correlation is not an appropriate metric for analyzing nominal relationships. Fisher's exact test allows us to nonparametrically examine the association between our categorical variables. It also allows us to account for small numbers of observations for certain variable frequency counts.
 
-```{r chi_sq_cats, include=TRUE, cache=TRUE, fig.height=8, fig.width=8}
+```{r chi_sq_cats, include=TRUE, cache=TRUE, echo=FALSE, fig.height=8, fig.width=8}
 
 # chi-square matrix for categorical features
 
@@ -204,7 +205,7 @@ Lower p-values indicate we reject the null hypothesis of random association. Obv
 
 In order to be complete, we also visually inspect the biserial correlation between factors and continuous variables. Given our factors are all dichotomous variables, biserial correlation is an appropriate measure to use when exploring relationships with continuous variables. Upon visual inspection, we are able to establish some common sense relationships.
 
-```{r biser_cor, include=TRUE, cache=TRUE, fig.height=8, fig.width=8.5}
+```{r biser_cor, include=TRUE, echo=FALSE, cache=TRUE, fig.height=8, fig.width=8.5}
 # get all data except response
 Dat <- AsVector
 # identify factor and numeric vars for biserial correlation
@@ -242,7 +243,7 @@ As described earlier, we know that the majority of observations in the overall d
 
 We inspect five factor variables visually to determine viability for spam prediction: isRe, isinReplyTo, and isWrote. The variable subSpamWords is a boolean that is true when a known spam word is contained in the subject. For instance, the word "viagra" is in the subject line. Nearly all occurrences of spam occur when these factors are set to false. On the other hand, we know that mostly valid emails (ham) occur when these variables' factors are set to true. 
 
-```{r fig.width=8.5, fig.height=4}
+```{r bool_impact, include=TRUE, echo=FALSE, fig.width=8.5, fig.height=4}
 
 emailDFrp[, c(1,which(bools)+1)] %>% 
   gather(Predictor, Value, 2:ncol(emailDFrp[,c(1, which(bools)+1)])) %>% 
@@ -261,7 +262,7 @@ There are occurences of spam emails in both boolean statuses for factor predicto
 
 We can easily identify separation of classes for numeric variables by looking at log values in a box plot. We inspect each numeric value in Figure XX.
 
-```{r include = TRUE, cache = TRUE, fig.width=8.5, fig.height=6}
+```{r numeric_impact, include = TRUE, echo=FALSE, cache = TRUE, fig.width=8.5, fig.height=6}
 nums <- which(lapply(emailDFrp, is.numeric) ==TRUE) 
 emailDFrp[,c(1, nums)] %>% 
   gather(Predictor, Value, 2:ncol(emailDFrp[,c(1, nums)])) %>% 
@@ -301,7 +302,7 @@ In order to explore the effect of rpart parameters mentioned previously, we firs
 
 We retain this initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward. However, as previously stated, we are interested in the variables rpart considers the most important for splitting. We can easily accomplish this with rpart package methods. Figure 7 shows the variables our base model considers the most important for classification.
 
-```{r fit_dtree_base, include=TRUE, fig.width=8.5, fig.height=5}
+```{r fit_dtree_base, echo=FALSE, include=TRUE, fig.width=8.5, fig.height=5}
 set.seed(4)
 
 # get counts to prep for train/test split
@@ -379,7 +380,7 @@ The base rpart model with default parameters is then subsequently compared to th
 
 Our base model lists perCaps as the most important variable to split in Figure 7. Behind it is BodyCharCt, which are the number of characters in the body of the email message. Given these variables are so important, we visually inspect a default rpart model fit on our training data set using perCaps and BodyCharCt.
 
-```{r perCaps_class, include=TRUE}
+```{r perCaps_class, include=TRUE, echo=FALSE}
 
 # for viz purposes, log top 2 importance, fit and predict
 trainDF$perCaps <- log(1+trainDF$perCaps)
@@ -408,13 +409,13 @@ We represent values on a log scale in order to provide a clean visualization of 
 
 Thus, we leave it up to rpart and its default parameters to create a decision tree containing 14 splits represented in Figure 9. This default fit is considered our base model.
 
-```{r tree_plot, include=TRUE, fig.width=8.5, fig.height=5}
+```{r tree_plot, include=TRUE, echo=FALSE, fig.width=8.5, fig.height=5}
 prp(splits, 0, extra=1)
 ```
 
 Of particular note is the base model's usage of bodyCharCt. It is used three times in the splitting process. Additionally, we can see quite a bit of misclassification in the model on the training set, particularly a prevalence of false negatives. We utilize the test set to investigate a confusion matrix and model performance in Figure X to address this issue.
 
-```{r confusion_base, include=TRUE}
+```{r confusion_base, echo=FALSE, include=TRUE}
 
 spam.preds <- predict(spam.clf, newdata =  testDF)
 #listMeasures(spam.tsk)
@@ -447,7 +448,7 @@ Parameter Search Criteria
 *maxdepth - 2, 5, 7, 10, 15, 20, 30, 40
 *splitting criterion - gini, information
 
-```{r rpart_optimize, cache=TRUE, include=FALSE}
+```{r rpart_optimize, echo=FALSE, cache=TRUE, include=FALSE}
 
 # Leaving commented code to show setup
 # we load resampling binary for reproducibility
@@ -480,16 +481,16 @@ spam.ps = makeParamSet(
 spam.ctrl = makeTuneControlGrid() 
 
 # launch parallel multicore for tuning purposes, speed
-parallelStart(mode="multicore", cpus=4)
+#parallelStart(mode="multicore", cpus=4)
 
 # tune parameters for our learner, task, optimize results for auc
-spam.tuned.clf = tuneParams( learner=spam.lrn, 
-                             task=spam.tsk, 
-                             resampling=spam.resamp.bin, # compare to same resampling method!
-                             control=spam.ctrl, 
-                             par.set=spam.ps, 
-                             measures=list(auc, fpr, fnr, mmce)) # optimize for auc
-parallelStop()
+#spam.tuned.clf = tuneParams( learner=spam.lrn, 
+#                             task=spam.tsk, 
+#                             resampling=spam.resamp.bin, # compare to same resampling method!
+#                             control=spam.ctrl, 
+#                             par.set=spam.ps, 
+#                             measures=list(auc, fpr, fnr, mmce)) # optimize for auc
+#parallelStop()
 
 #save(spam.tuned.clf, file='spam.tuned.clf')
 load('src/spam.tuned.clf')
@@ -510,7 +511,7 @@ spam.opt.clf <- mlr::train(spam.opt.lrn, spam.tsk)
 
 Each combination of parameters is cross-validated on 10 folds of the training data set using AUC as our performance metric. After the grid search and cross-validation, the model with the best AUC performance on each validation set has a complexity penalty of 0.001, a minimum split of 20, a maximum tree node depth of 30 and uses information as its splitting criterion. We can see the optimization path for our rpart model clearly by viewing the AUC score in sorted order. 
 
-```{r optimize_path, include=TRUE}
+```{r optimize_path, include=TRUE, echo=FALSE}
 
 plotHyperParsEffect(data, x = "iteration", y = "auc.test.mean",
   plot.type = "line", partial.dep.learn = "regr.randomForest")
@@ -519,7 +520,7 @@ plotHyperParsEffect(data, x = "iteration", y = "auc.test.mean",
 
 Optimization begins to stall just under an AUC of 0.97 for our training data. Our optimized tree is much larger than our base model. In fact, 76 total splits are used for our optimized tree. This is because the optimal complexity penalty is set low at 0.001. This may be a risk for overfitting our test set, which we will explore shortly.
 
-```{r parms_look, include = TRUE}
+```{r parms_look, echo=FALSE, include = TRUE}
 
 splits <- getLearnerModel(spam.opt.clf)
 
@@ -539,7 +540,7 @@ Of the 29 models fit during the tuning process with a resulting cross-validated 
 
 We can easily see the complexity parameter's dominance in Figure XX below, where the mean AUC across validation splits is maximized as long as the cp remains low. 
 
-```{r cp_vs_minsplit, include=TRUE}
+```{r cp_vs_minsplit, echo=FALSE, include=TRUE}
 # plot hyper parameter effects
 plotHyperParsEffect(data, x = "cp", y = "minsplit", z = "auc.test.mean",
   plot.type = "heatmap", partial.dep.learn = "regr.randomForest")+
@@ -549,7 +550,7 @@ plotHyperParsEffect(data, x = "cp", y = "minsplit", z = "auc.test.mean",
 
 After thoroughly exploring rpart parameters, we turn to generalization performance. Given an AUC of 0.95 for our base model, we fit our optimized model to the same training data set of emails. Results 
 
-```{r final_results}
+```{r final_results, echo=FALSE, include=TRUE}
 
 # results
 spam.opt.preds <- predict(spam.opt.clf, newdata = testDF)
@@ -568,14 +569,14 @@ kable(cbind(optimized = round(opt,3), base = round(base,3)))
 
 Our optimized model outperforms the base model on our key metric: AUC. Given our base model struggled with false negative rates, we also include false positive and false negative rates for the classification of spam mail on the test data set. Our model significantly improves the false negative, false positive and misclassification error rates as well. No analysis using AUC would be complete without viewing an ROC curve for comparison.
 
-``` {r roc_curve, include = TRUE}
+``` {r roc_curve, include = TRUE, echo=FALSE}
 # plot ROC curves for base and optimized
 df = generateThreshVsPerfData(list(base = spam.preds, 
                                    optimized = spam.opt.preds), 
                                    measures = list(fpr, tpr))
 
 
-plotROCCurves(df)
+# plotROCCurves(df)
 qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")+
   ggtitle("test")
 
@@ -613,7 +614,7 @@ https://stats.stackexchange.com/questions/191842/how-does-the-complexity-paramet
 
 
 
-```{r}
+```{r, eval=FALSE}
 
 plotHyperParsEffect(data, x = "minsplit", y = "maxdepth", z = "auc.test.mean",
   plot.type = "heatmap", partial.dep.learn = "regr.randomForest")
@@ -638,7 +639,7 @@ plotThreshVsPerf(thresh_plot)+
 
 ```
 
-```{r dtree_explore, include=FALSE}
+```{r dtree_explore, include=FALSE, eval=FALSE}
 
 # this block is exploration of the mlr package in R
 # optimize both fnr and fpr
@@ -720,7 +721,7 @@ plotHyperParsEffect(data[[1]], x = "iteration", y = "auc.test.mean",
 
 ```
 
-```{r nbayes_get_data, include=FALSE}
+```{r nbayes_get_data, include=FALSE, eval=FALSE}
 # RSpamData not available in R 3.4.3
 
 spamPath <- "Data"
@@ -857,7 +858,7 @@ isSpam = rep(c(FALSE, FALSE, FALSE, TRUE, TRUE), numMsgs)
 msgWordsList = unlist(msgWordsList, recursive = FALSE)
 ```
 
-``` {r nbayes_train_test_split, include=FALSE}
+``` {r nbayes_train_test_split, include=FALSE, eval=FALSE}
 set.seed(418910)
 
 numEmail = length(isSpam)
@@ -887,7 +888,7 @@ trainIsSpam = rep(c(TRUE, FALSE),
 
 ```
 
-```{r nbayes_freq_table, include=FALSE}
+```{r nbayes_freq_table, include=FALSE, eval=FALSE}
 
 computeFreqs <- function(wordsList, spam, bow = unique(unlist(wordsList))) {
    # create a matrix for spam, ham, and log odds
@@ -928,7 +929,7 @@ computeFreqs <- function(wordsList, spam, bow = unique(unlist(wordsList))) {
 
 ```
 
-```{r nbayes_classify, include=FALSE}
+```{r nbayes_classify, include=FALSE, eval=FALSE}
 
 # use our frequency and odds table to classify new messages
 computeMsgLLR = function(words, freqTable) 
