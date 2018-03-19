@@ -211,7 +211,12 @@ Early efforts at filtering spam were centered on the assumed validity of identit
 
 Google, via it's gmail product, as well as other providers, have had an ample data set over the past several years.  All have searched for algorithms that reduce the number of false positives (labeled as spam, when it's actually not spam) and false neagetives (labeled as not spam, when it actually is spam).  
 
-The value of intercepting spam communications, across mediums, is also growing.  Most mobile phone numbers have experienced the spoofed-number attack, where a number similar to your own places a call with a robot caller on the opposite end.  A number of smart phone applications are currently trying to address this problem by machine learning.  Likewise, SMS text messaging spam also provides a risk to users of mobile phones.  In both cases, the originator of the call or message is not the number that is listed on the phone.
+A 2012 article in the *Journal of Economic Perspectives*[2] cites that up to 3% of the 50 billion pieces of spam e-mail sent each today are successful in reaching the recipient.  The authors of the paper develop a cost of $20 billion annually to American consumers from spam.  
+
+The value of intercepting spam communications, across mediums, is also growing.  Most mobile phone numbers have experienced the spoofed-number attack, where a number similar to your own places a call with a robot caller on the opposite end.  A number of smart phone applications are currently trying to address this problem by machine learning.  Likewise, SMS text messaging spam also provides a risk to users of mobile phones.  In both cases, the originator of the call or message is not the number that is listed on the phone, but is a false or spoofed phone number used with the intent of deceiving the recipient.  Phishing attacks via SMS skirt the boundaries of security in several ways.  First, traditonally there have not been products to address it.  Second, the perceived higher level of intimacy by users given to SMS versus e-mail seems to reduce the users' awareness of threats.  Third, the smaller screen may reduce users' awareness to visiting spoofed websites.
+
+As e-mail filtering continues to move in the direction of machine learning, development of new variables is likely an area for improvement in accuracy and performance.  This could move further into the area of natural language processing, and perhaps more specificity to different languages.  One can also imagine moving some of the service closer to the user, to further allow for customization.  Of course, spam senders will also try to defeat the measures equally as much - and one can imagine training an adversarial model to allow for spam e-mail to pass through filters and land in your inbox.  Engineers and developers will need to continue to walk a fine line - avoiding false positives (thereby filtering legitimate e-mails) with ensuring that users' experience and time is not absorbed by spam e-mails.
+
 =======
 ```{r fig.width=8.5, fig.height=4}
 >>>>>>> 77bb676df0c89eaad0aec406b602359f3fdaeab8
@@ -234,7 +239,7 @@ https://cran.r-project.org/web/packages/rpart/rpart.pdf
 https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf
 https://stats.stackexchange.com/questions/191842/how-does-the-complexity-parameter-correspond-to-the-number-of-splits-in-cross-va
 [1] https://scholar.google.com/scholar_case?case=15356452945994377133
-[2]
+[2] https://www.aeaweb.org/articles?id=10.1257/jep.26.3.87
 =======
 There are occurences of spam emails in both boolean statuses for factor predictor variables numEnd, and subSpamWords. However, the true cases of each predictor variable have more cases of spam than not spam. 
 
@@ -386,7 +391,7 @@ show ROC curve
 https://cran.r-project.org/web/packages/rpart/rpart.pdf
 https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf
 https://stats.stackexchange.com/questions/191842/how-does-the-complexity-parameter-correspond-to-the-number-of-splits-in-cross-va
-
+[2]  https://www.aeaweb.org/articles?id=10.1257/jep.26.3.87
 
 
 
