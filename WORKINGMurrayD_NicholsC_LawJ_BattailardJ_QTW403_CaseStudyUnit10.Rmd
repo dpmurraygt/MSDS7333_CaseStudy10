@@ -1,5 +1,5 @@
 ---
-title: "Spam Detection: Update this title"
+title: "Exploring rpart and CART for Spam Detection"
 author: "Dennis Murray, Jared Law, Julien Bataillard, Cory Nichols"
 date: "March 20th, 2018"
 output:
@@ -472,18 +472,14 @@ https://stats.stackexchange.com/questions/191842/how-does-the-complexity-paramet
 
 ```{r}
 
-
-
-# what does our optimal threshold look like for our metrics?
-n = getTaskSize(spam.tsk)
-thresh_plot = generateThreshVsPerfData(spam.pred, measures = list(auc, mmce))
-plotThreshVsPerf(thresh_plot)
-
-
 # RESAMPLING
-spam.resamp = makeResampleDesc(method = "CV", 
-                               iters = 10, 
-                               stratify = TRUE)
+
+# Leaving commented code to show setup, however, we use resampling binary
+# for reproducibility
+#spam.resamp = makeResampleDesc(method = "CV", 
+#                               iters = 10, 
+#                               stratify = TRUE)
+
 
 # pull out resampling instance for reproducibility
 #spam.resamp.bin = makeResampleInstance(spam.resamp, task=spam.tsk)
@@ -503,17 +499,13 @@ spam.ps = makeParamSet(
                                                            info = list(split = c("information"))))
                  )
 
-print(spam.ps)
-# Create the grid and identify algorithm
-
-# set up control, no params passed as we are searching
-# over a discrete set of values
+# Create the grid and identify algorithm if needed
 spam.ctrl = makeTuneControlGrid() 
 
-# launch parallel multicore for tuning
+# launch parallel multicore for tuning purposes, speed
 parallelStart(mode="multicore", cpus = 4)
 
-# tune parameters for our learner, task, optimize for auc
+# tune parameters for our learner, task, optimize results for auc
 spam.tuned.clf = tuneParams( learner = spam.lrn, 
                              task = spam.tsk, 
                              resampling = spam.resamp.bin, # compare to same resampling method!
@@ -546,16 +538,24 @@ spam.opt.preds <- predict(spam.opt.clf, newdata = testDF)
 spam.preds <- predict(spam.clf, newdata =  testDF)
 
 
-performance(spam.opt.preds, measures=list(auc, mmce))
+performance(spam.opt.preds, measures=list(auc, mmce, fpr, npr))
+
+# whooped that a**
+plotROCCurves(df)
+qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")
 
 
 df = generateThreshVsPerfData(list(base = spam.preds, 
                                    optimized = spam.opt.preds), 
                                    measures = list(fpr, tpr))
 
-# whooped that a**
-plotROCCurves(df)
-qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")
+# what does our optimal threshold look like for our metrics?
+n = getTaskSize(spam.tsk)
+thresh_plot = generateThreshVsPerfData(spam.pred, measures = list(auc, mmce))
+plotThreshVsPerf(thresh_plot)
+
+
+
 
 ```
 
