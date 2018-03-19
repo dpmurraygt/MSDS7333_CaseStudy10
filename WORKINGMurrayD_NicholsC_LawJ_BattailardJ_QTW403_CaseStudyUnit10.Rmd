@@ -34,6 +34,7 @@ library(ggthemes)
 library(GGally)
 library(ltm)
 library(rpart.plot)
+library(knitr)
 ```
 
 ```{r make, include=FALSE, cache=TRUE, eval=FALSE}
@@ -283,10 +284,10 @@ Examination of these predictor variables gives some idea of how we should expect
 We explore variable selection and the effect of rpart's control parameters on classifying spam emails by fitting a default rpart model and comparing it to a separate, optimized rpart model. Specifically, we explore four different parameters: complexity penalty (cp), minsplit, maxdepth, and the splitting criteria. Table XX provides a description for each of these parameters. 
 
 Table XX
-* cp  - A scaled complexity penalty that ranges from 0 to 1. In a classification setting, cp is compared against the error rate relative to a previous split. Any split that does not decrease the overall lack of fit by cp is not considered.
-* minsplit - the minimum number of observations that must exist in a node in order for a split to be attempted.
-* maxdepth - The maximum depth of any node of the final tree, with the root node counted as depth 0. 
-* splitting criteria - gini or information. Gini utilizes the gini index to optimize split points, information uses entropy and information gain.
+* cp  - A scaled complexity penalty that ranges from 0 to 1. In a classification setting, cp is compared against the error rate relative to a previous split. Any split that does not decrease the overall lack of fit by cp is not considered. Default is 0.01.
+* minsplit - the minimum number of observations that must exist in a node in order for a split to be attempted. Default is 20.
+* maxdepth - The maximum depth of any node of the final tree, with the root node counted as depth 0. Default is 30.
+* splitting criteria - gini or information. Gini utilizes the gini index to optimize split points, information uses entropy and information gain. Default is Gini.
 
 Utilizing the full listing of variables in our email dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous variable splits. Applying the first three parameters in table XX typically reduces the size of the final tree. This reduction in variance can help with model generalization to the test dataset. 
 
@@ -370,12 +371,6 @@ ggplot(dat, aes(reorder(vars, importance, sum), importance))+
 At the top of the variable importance list is perCaps, or the percentage of capital alpha characters in the body. Importance in Figure 7 is a weighted sum of improvement in impurity for each variable split. The perCaps variable overshadows all other variables from an importance standpoint. Indeed, we saw good separation of spam and not spam in the previous section for this variable. We are able to classify 77 percent of all spam messages based on a split value of 13 percent for perCaps. In this case, the base model predicts non-spam when a message contains less than 13 percent capitals. Additionally, we see email from addresses ending in numeric (numEnd) and priority provide little value for spam classification. 
 Now that we've explored variable importances, we tackle our objective of exploring key parameters and fitting an optimized model. For comparison purposes, an optimized rpart decision tree model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. The mean AUCs for all models and associated parameters are compared and the model with the highest cross-validated AUC is chosen as our optimized model.
 
-Parameter Search Criteria
-*complexity parameter (cp) - 0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5,
-*minsplit - 1, 5, 10, 15, 20, 30, 40,
-*maxdepth - 2, 5, 7, 10, 15, 20, 30, 40
-*splitting criterion - gini, information
-
 The base rpart model with default parameters is then subsequently compared to the optimized model given the test data set. We explore model performance and comparisons in the next section.
 
 ## Results
@@ -439,21 +434,160 @@ performance(spam.preds, measures=list(auc, mmce, fpr, fnr))
 
 ```
 
-In order to address overall misclassification, we include MMCE, or model misclassification error rate in our metrics set. As seen in the confusion matrix, the base model struggles with false negatives. In total, 95 observations in the test set out of 479 spam records are misclassified for a false negative rate of 19.8 percent. MMCE overall is high at almost nine percent. We explore if we can improve on these metrics by optimizing rpart's hyperparameters.
+In order to address overall misclassification, we include MMCE, or model misclassification error rate in our metrics set. As seen in the confusion matrix, the base model struggles with false negatives. In total, 76 observations in the test set out of 479 spam records are misclassified for a false negative rate of 15.8 percent. MMCE overall is high at almost eight percent. We explore if we can improve on these metrics by optimizing rpart's hyperparameters.
 
 
 ### Optimized Model Results
 
-show hyperparam effects viz (iter and heatmaps)
+As stated previously, we explore the complexity parameter, minimum split for each node, maximum depth of the tree and the splitting criterion via a grid search. The parameter list is given in Table XX below:
+
+Parameter Search Criteria
+*complexity parameter (cp) - 0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5,
+*minsplit - 1, 5, 10, 15, 20, 30, 40,
+*maxdepth - 2, 5, 7, 10, 15, 20, 30, 40
+*splitting criterion - gini, information
+
+```{r rpart_optimize, cache=TRUE, include=FALSE}
+
+# Leaving commented code to show setup
+# we load resampling binary for reproducibility
+# for reproducibility
+
+# spam.resamp = makeResampleDesc(method = "CV", 
+#                               iters = 10, 
+#                               stratify = TRUE)
 
 
-### Model Comparisons
+# pull out resampling instance for reproducibility
+#spam.resamp.bin = makeResampleInstance(spam.resamp, task=spam.tsk)
+#save(spam.resamp.bin, file ="resampling_binary") # save for future use!
+load("src/resampling_binary")
 
-conclude
-show performance results
-show ROC curve
+
+# TUNING 
+# identify search grid params - we'll brute force here based on reasonable param vals
+# can also random search over numeric ranges instead
+# test individual params (if range makeNumericParam(param, lower=, upper=))
+spam.ps = makeParamSet(
+                  makeDiscreteParam("cp", values = c(0.001, 0.01, 0.1, 0.2)),
+                  makeDiscreteParam("minsplit", values = c(1, 5, 10, 15, 20, 30)),
+                  makeDiscreteParam("maxdepth", values = c(1, 5, 10, 15, 20, 30)),
+                  makeDiscreteParam("parms", values = list(gini = list(split = c("gini")), 
+                                                           info = list(split = c("information"))))
+                 )
+
+# Create the grid and identify algorithm if needed
+spam.ctrl = makeTuneControlGrid() 
+
+# launch parallel multicore for tuning purposes, speed
+parallelStart(mode="multicore", cpus=4)
+
+# tune parameters for our learner, task, optimize results for auc
+spam.tuned.clf = tuneParams( learner=spam.lrn, 
+                             task=spam.tsk, 
+                             resampling=spam.resamp.bin, # compare to same resampling method!
+                             control=spam.ctrl, 
+                             par.set=spam.ps, 
+                             measures=list(auc, fpr, fnr, mmce)) # optimize for auc
+parallelStop()
+
+#save(spam.tuned.clf, file='spam.tuned.clf')
+load('src/spam.tuned.clf')
+
+# create cleaned hyperparameter effect data from tuning
+data <- generateHyperParsEffectData(spam.tuned.clf, 
+                                    partial.dep = TRUE)
+
+# get df of tuning results
+df_models <- data$data
+
+# get optimal hyperparameters for use on test
+spam.opt.lrn <- setHyperPars(spam.lrn, par.vals = spam.tuned.clf$x)
+
+# train the model on training set
+spam.opt.clf <- mlr::train(spam.opt.lrn, spam.tsk)
+```
+
+Each combination of parameters is cross-validated on 10 folds of the training data set using AUC as our performance metric. After the grid search and cross-validation, the model with the best AUC performance on each validation set has a complexity penalty of 0.001, a minimum split of 20, a maximum tree node depth of 30 and uses information as its splitting criterion. We can see the optimization path for our rpart model clearly by viewing the AUC score in sorted order. 
+
+```{r optimize_path, include=TRUE}
+
+plotHyperParsEffect(data, x = "iteration", y = "auc.test.mean",
+  plot.type = "line", partial.dep.learn = "regr.randomForest")
+
+```
+
+Optimization begins to stall just under an AUC of 0.97 for our training data. Our optimized tree is much larger than our base model. In fact, 76 total splits are used for our optimized tree. This is because the optimal complexity penalty is set low at 0.001. This may be a risk for overfitting our test set, which we will explore shortly.
+
+```{r parms_look, include = TRUE}
+
+splits <- getLearnerModel(spam.opt.clf)
+
+df_models[df_models$auc.test.mean > 0.96,] %>% 
+      ggplot(aes(x=minsplit, y=auc.test.mean)) + 
+      geom_col() + 
+      #facet_wrap(~Predictor, scales = "free_y", ncol=5) + 
+      theme_light() + 
+      ggtitle("Figure 6: Continous Predictor Variables and Spam Outcomes") + 
+      #scale_x_discrete("Spam or Ham")+
+      ylab("Log Value")
+
+
+```
+
+Of the 29 models fit during the tuning process with a resulting cross-validated AUC of greater than 0.96, all have complexity parameters of 0.001. Additionally the maxdepth for a decision tree node is always 15 or higher. 14 out of the 29 models use the information splitting criterion and the majority of models have a minsplit value of 15 or higher. This result indicates the complexity parameter tends to dominate when it comes to maximizing AUC results for our analysis task. Optimization favors more complex models with deeper nodes. However, the splitting criterion is nearly a toss up.
+
+We can easily see the complexity parameter's dominance in Figure XX below, where the mean AUC across validation splits is maximized as long as the cp remains low. 
+
+```{r cp_vs_minsplit, include=TRUE}
+# plot hyper parameter effects
+plotHyperParsEffect(data, x = "cp", y = "minsplit", z = "auc.test.mean",
+  plot.type = "heatmap", partial.dep.learn = "regr.randomForest")+
+  ggtitle("test")
+
+```
+
+After thoroughly exploring rpart parameters, we turn to generalization performance. Given an AUC of 0.95 for our base model, we fit our optimized model to the same training data set of emails. Results 
+
+```{r final_results}
+
+# results
+spam.opt.preds <- predict(spam.opt.clf, newdata = testDF)
+spam.preds <- predict(spam.clf, newdata =  testDF)
+
+
+opt<-performance(spam.opt.preds, 
+            measures=list(auc, mmce, fpr, fnr))
+                
+base<-performance(spam.preds, 
+            measures=list(auc, mmce, fpr, fnr))
+
+kable(cbind(optimized = round(opt,3), base = round(base,3)))
+
+```
+
+Our optimized model outperforms the base model on our key metric: AUC. Given our base model struggled with false negative rates, we also include false positive and false negative rates for the classification of spam mail on the test data set. Our model significantly improves the false negative, false positive and misclassification error rates as well. No analysis using AUC would be complete without viewing an ROC curve for comparison.
+
+``` {r roc_curve, include = TRUE}
+# plot ROC curves for base and optimized
+df = generateThreshVsPerfData(list(base = spam.preds, 
+                                   optimized = spam.opt.preds), 
+                                   measures = list(fpr, tpr))
+
+
+plotROCCurves(df)
+qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")+
+  ggtitle("test")
+
+```
+
+We can now visually attest our optimized rpart model outperforms the base rpart model using default parameters. 
 
 ## Conclusions and Future Work
+
+Through detailed data exploration, extensive parameter investigation, and tuning, we are able to improve upon rpart's default settings in an email spam classification setting. We determined that the complexity penalty in rpart dominates when optimizing for AUC given our analysis task. Further, we were able to effectively generalize to a test data set using a relatively complex rpart decision tree.
+
+While our objective was accomplished, some cautious advice must be given. 
 
 Supreme Court Justice Potter Stewart is famously credited with the quotation: "But I know it when I see it."[1] In the context that he was in, Justice Stewart was referencing a film that was thought to be outside the standards of decency accepted in the era of the 1960's. In the present day, most internet and mobile phone users could also apply it to the subject of spam, or commercial, unsolicited e-mail: they know it when they see it.
 
@@ -481,94 +615,31 @@ https://stats.stackexchange.com/questions/191842/how-does-the-complexity-paramet
 
 ```{r}
 
-# RESAMPLING
-
-# Leaving commented code to show setup, however, we use resampling binary
-# for reproducibility
-#spam.resamp = makeResampleDesc(method = "CV", 
-#                               iters = 10, 
-#                               stratify = TRUE)
-
-
-# pull out resampling instance for reproducibility
-#spam.resamp.bin = makeResampleInstance(spam.resamp, task=spam.tsk)
-#save(spam.resamp.bin, file ="resampling_binary") # save for future use!
-load("resampling_binary")
-
-
-# TUNING 
-# identify search grid params - we'll brute force here based on reasonable vals
-# can also random search over numeric ranges instead
-# test individual params (if range makeNumericParam(param, lower=, upper=))
-spam.ps = makeParamSet(
-                  makeDiscreteParam("cp", values = c(0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5)),
-                  makeDiscreteParam("minsplit", values = c(1, 5, 10, 15, 20, 30, 40)),
-                  makeDiscreteParam("maxdepth", values = c(2, 5, 7, 10, 15, 20, 30, 40)),
-                  makeDiscreteParam("parms", values = list(gini = list(split = c("gini")), 
-                                                           info = list(split = c("information"))))
-                 )
-
-# Create the grid and identify algorithm if needed
-spam.ctrl = makeTuneControlGrid() 
-
-# launch parallel multicore for tuning purposes, speed
-parallelStart(mode="multicore", cpus = 4)
-
-# tune parameters for our learner, task, optimize results for auc
-spam.tuned.clf = tuneParams( learner = spam.lrn, 
-                             task = spam.tsk, 
-                             resampling = spam.resamp.bin, # compare to same resampling method!
-                             control = spam.ctrl, 
-                             par.set = spam.ps, 
-                             measures = list(auc))
-parallelStop()
-
-# hyperparam effects
-data <- generateHyperParsEffectData(spam.tuned.clf, 
-                                    partial.dep = TRUE)
-
-# partial dependency plots based on random forest regression
-plotHyperParsEffect(data, x = "iteration", y = "auc.test.mean",
-  plot.type = "line", partial.dep.learn = "regr.randomForest")
-
-plotHyperParsEffect(data, x = "cp", y = "maxdepth", z = "auc.test.mean",
-  plot.type = "heatmap", partial.dep.learn = "regr.randomForest")
-
 plotHyperParsEffect(data, x = "minsplit", y = "maxdepth", z = "auc.test.mean",
   plot.type = "heatmap", partial.dep.learn = "regr.randomForest")
 
 
-# get optimal hyperparameters for use on test
-spam.opt.lrn <- setHyperPars(spam.lrn, par.vals = spam.tuned.clf$x)
-spam.opt.clf <- mlr::train(spam.opt.lrn, spam.tsk)
 
-# results
-spam.opt.preds <- predict(spam.opt.clf, newdata = testDF)
-spam.preds <- predict(spam.clf, newdata =  testDF)
-
-
-performance(spam.opt.preds, measures=list(auc, mmce, fpr, npr))
-
-# whooped that a**
-plotROCCurves(df)
-qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")
-
-
+# plot ROC curves for base and optimized
 df = generateThreshVsPerfData(list(base = spam.preds, 
                                    optimized = spam.opt.preds), 
                                    measures = list(fpr, tpr))
 
+
+plotROCCurves(df)
+qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")+
+  ggtitle("test")
+
 # what does our optimal threshold look like for our metrics?
 n = getTaskSize(spam.tsk)
-thresh_plot = generateThreshVsPerfData(spam.pred, measures = list(auc, mmce))
-plotThreshVsPerf(thresh_plot)
-
-
-
+thresh_plot = generateThreshVsPerfData(spam.preds, measures = list(fpr, fnr, mmce))
+plotThreshVsPerf(thresh_plot)+
+  ggtitle("test")
 
 ```
 
 ```{r dtree_explore, include=FALSE}
+
 # this block is exploration of the mlr package in R
 # optimize both fnr and fpr
 spam.ctrl = makeTuneMultiCritControlGrid()
