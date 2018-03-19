@@ -8,23 +8,81 @@ output:
 section: MSDS 7333-403 - Quantifying the World - Case Study 5 (Unit 10)
 ---
 
+```{r setup, include=FALSE, cache=TRUE}
+dir <- "~/DataScience/SMU/QTW/Unit10/CaseStudy/"
+setwd(dir)
+knitr::opts_knit$set(root.dir = dir)
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r load_libs, include=FALSE, cache=TRUE}
+library(magrittr)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(tm)
+library(rpart)
+library(caret)
+library(mlr)
+library(parallelMap)
+library(doParallel)
+library(missForest)
+library(scales)
+library(ggthemes)
+library(GGally)
+library(ltm)
+```
+
+```{r make, include=FALSE, cache=TRUE, eval=FALSE}
+# get and clean data
+source("src/make.R")
+
+# set seed for reproducibility
+set.seed(418910) 
+
+# rename and relevel vars for better interpretation
+emailDFrp$isSpam <- emailDFrp$isSpam %>% 
+                      revalue(c("T"="Spam", "F"="Ham")) %>% 
+                        relevel("Spam")
+
+```
+
 ## Abstract
 
-The use of email has grown exponentially since the introduction of the world wide web in the late 20th Century.  The amount of email a person receives on a given day can make filtering through it a nightmare for most.  Detection methods to filter out unwanted emails have been around since the late 1990s, and while the algorithms have improved, there is always improvement to be made.  In this paper we work on optimizing R part parameters using minsplit, the complexity penalty (cp), and maxdepth, resulting in better performance versus default parameters after nested cross validation.  The performance metric used is AUC to maximize true positive rate of detection.
+The use of email has grown exponentially since the introduction of the world wide web in the late 20th century. Today, spam email is ubiquotous on every email platform. Spam detection methods to filter out unwanted emails have originated in the late 1990s and while the algorithms have improved, so have spam avoidance methods. In this paper, we explore rpart; a classification and regression tree package in R. Specifically, we explore the effectiveness of spam classification using rpart and its parameters on a dataset of emails previously classified as spam or ham (valid email). After parameter optimization and cross validation, our rpart model outperforms a rpart model with default parameters.
 
 ## Introduction
 
-Email is an integral part of our daily lives, from business to personal use.  The overall information spread through the use of email is far and wide, and includes unwanted marketing, phishing and information.  When email was introduced in the late 1980s, it spread rapidly, and so did the ability for companies to market products to email users.  In addition, entities with ulterior motives sprang up, attempting to gain information from those using phishing and social engineering.  These unwanted emails were given the ubiquitous term of “spam”.
+Email is an integral part of our lives. The overall information spread through the use of email is far and wide, and includes unwanted marketing and phishing. When email was introduced in the late 1980s, it spread rapidly, and so did the ability for companies to market products to email users. In addition, entities with ulterior motives sprang up, attempting to gain information from people using phishing and social engineering. These unwanted emails were termed "spam."
 
-Spam filters were introduced not long afterwards, an extension of email filters already in place.  These filters automatically process the incoming messages, applying certain techniques to identify unwanted emails.  Baysean email filters began to be utilized in 1996 but didn’t become popular until much later.  These techniques utilize the probabilities of certain words occurring in regular emails versus spam emails.
+Spam filters were introduced not long after the introduction of email. These filters automatically process the incoming messages, applying certain techniques to identify unwanted emails.  Bayesian email filters began to be utilized in 1996 but didn’t become popular until much later. These techniques utilize the probabilities of certain words occurring in regular emails versus spam emails.
 
-In this paper, we expand upon current techniques, working to consider other parameters that can be used to control the recursive partitioning process.  We look at literature to catalogue previous attempts using similar improvements.  We then focus on the optimization of using R part parameters minsplit, maxdepth, and the complexity penalty (cp).  The expansion results in better performance versus default parameters after nested cross validation as shown using the AUC performance metric to maximize the true positive rate of detection.  Our paper will conclude with a discussion of the applications of the improvements in anti-spam email filtering.
+Today, many different methods exist for spam email classification. We explore a decision tree package in R called rpart. Our objective is to investigate and optimize key hyperparameters used in rpart in order to classify email messages as spam or not spam. Specifically, we analyze two separate decision trees for classifying spam email using the rpart package. We fit one decision tree on training data using default hyperparameters in rpart. After optimizing the minsplit, maxdepth and complexity parameters, we fit a second decision tree on the training data. We compare each model's generalization performance on test email data. Our metric of choice is AUC or the area under the ROC curve. We use this metric to maximize the true positive rate of our classifiers.
+
+In the subsquent section, we review research literature to catalogue spam filtering techniques in academics and business. As part of the methods section, we explore a dataset of emails tagged as spam or not spam. We then implement two different decision trees and compare their generalization performance to determine if hyperparameter tuning results in better performance. Our paper concludes with a discussion of the applications of the improvements in anti-spam email filtering.
 
 ## Literature Review
 
 ## Methods
 
+Prior to exploring and fitting a decision tree using rpart, we briefly introduce and explore the email dataset. Specifically, predictor variable relationships are examined using correlation and indepdence methods. Relationships of predictor variables to the response variable are also investigated visually. We also introduce variable importance, an rpart method that will allow us to efficiently determine optimal variables for splitting.
+
 ### Exploratory Data Analysis
+
+The email dataset is made up of a corpus of emails from SpamAssassin.org (xx). In total, there are 9348 unique emails. Each observation is made up of 29 predictor variables and one response variable. Of the 30 total variables, 17 are boolean factor variables and the remaining 13 variables represent numeric variables. Our task is to classify isSpam, a boolean variable with levels of "Spam" and "Ham."
+
+Numeric vars - 
+Boolean vars - 
+
+For context, a sample description of five variables is given below:
+
+*perCaps: percentage of capitals in the email body
+*isYelling: subject alpha characters are all capital
+*bodyCharCt: number of characters in the body of the email
+*numEnd: email ends in numbers
+*isRe: subject contains reply characters Re:
+
 A preliminary evaluation of the data found missing data in 303 unique rows.  The availability of values for the following predictor variables was incomplete for:
 * subSpamWords
 * subQuesCt
@@ -34,127 +92,116 @@ A preliminary evaluation of the data found missing data in 303 unique rows.  The
 * noHost
 * isYelling
 
-```{r fig.height=3.5, fig.width=8.5}
-emailDF2 %>% group_by(isSpam) %>% summarise(Count=n()) %>% mutate(Pct = Count/sum(Count))%>%
-  ggplot(aes(x=isSpam, y=Count, label=comma(Count))) + geom_bar(stat='identity') +  theme_light() + ggtitle("Spam vs. Non-Spam in Dataset") + scale_y_continuous("Count", labels =comma, limits=c(0,7500)) + scale_x_discrete("Is Spam - True or False")  + geom_text(vjust=-0.5)
+Rather than discard over two percent of the dataset, we undertake imputation using random forest imputation methods for both numeric and categorical predictor variables.
+
+```{r dataset_bal, include=TRUE, fig.height=3.5, fig.width=8.5}
+emailDFrp %>% 
+  group_by(isSpam) %>% 
+    dplyr::summarise(Count=n()) %>% 
+      mutate(Pct = Count/sum(Count)) %>%
+      ggplot(aes(x=isSpam, y=Count, label=comma(Count))) + 
+      geom_bar(stat='identity') +  theme_light() + 
+      ggtitle("Figure X: Spam vs. Non-Spam Split") + 
+      scale_y_continuous("Count", labels =comma, limits=c(0,7500)) + 
+      scale_x_discrete("Is Spam - True or False")  + 
+      geom_text(vjust=-0.5)
+```
+
+Our dataset is unbalanced, with 2,371 (26%) spam emails, and 6,674 (74%) valid emails (ham).  This imbalance in the dataset could introduce higher false negative ratesfor our analysis task.
+
+#### Explanatory Variable Relationships
+
+```{r impute_df, cache=TRUE, include=FALSE}
+
+
+# impute missing vals based on forest classification and regression
+# set up parallel method
+registerDoParallel(cores=4)
+# impute
+df <- missForest(emailDFrp, 
+                 maxiter=5, 
+                 ntree=50, 
+                 parallelize = c('forests'),
+                 variablewise = TRUE)
+# establish imputed set
+emailDFrp <- df$ximp
 
 
 ```
 
-Our dataset is unbalanced: divided to 2,371 (26%) observations of Spam, and 6,674 (74%) observations of Non-Spam.  This imbalancce in the dataset could introduce some higher false negative rates in some model types.
+```{r cor_mat, cache=TRUE, fig.height=8, fig.width=8}
 
-```{r fig.height=8, fig.width=8}
-#I'm going to excerpt complete cases only, to deal with the NA's
-emailDF2<-emailDF[complete.cases(emailDF),]
-AsVector<-emailDF2[,c(2:30)]
-cormat<- (round(cor(AsVector),2))
-cormat <- reshape::melt(cormat)
-cormat %>% ggplot(aes(x=X1, y=X2, fill=value)) + geom_tile() + theme(legend.position = "bottom", axis.text.x = element_text(angle=90, vjust=-.5)) + scale_x_discrete("") + scale_y_discrete("") + ggtitle("Correlation between Predictor Variable Pairs")
+# build correlation matrix
+AsVector <- emailDFrp[, c(2:30)]
 
+nums <- sapply(AsVector, is.numeric)
+bools <- sapply(AsVector, is.factor)
+
+# correlation matrix for numerical features
+cormat<- (round(cor(AsVector[, nums]), 2))
+cormat <- reshape::melt(cormat, na.rm=TRUE)
+
+cormat %>% ggplot(aes(x=X1, y=X2, fill=value)) + 
+           geom_tile() + 
+           theme(legend.position = "bottom", 
+                 axis.text.x = element_text(angle=90, 
+                                            vjust=-.5)) + 
+           scale_x_discrete("") + 
+           scale_y_discrete("") + 
+           ggtitle("Figure X: Correlation Between Numeric Predictor Variable Pairs")
 
 ```
 
-Working without the incomplete cases, the correlation matrix reveals several high correlations between predictors:
+Working with our imputed dataset, the correlation matrix in figure XX reveals several significant correlations between numerical predictors:
+
 * numLines and bodyCharCt
-* isRe and isinReplyTo
-* isWrote and isinReplyTo
-* forwards with isinReplyTo, isRe
-* numAtt with hour, isPGPsigned, and is multipartText
-* isWrote with fowards, isinReplyTo, and isRe
+* perHTML and bodyChartCt
+* numDlr and SubQuestCt
 
-The higher correlation between predictor variables could cause these variables to be collectively overweighted in modeling, as they may not be fully independent from one another.
+The higher correlation between predictor variables could cause these variables to be collectively overweighted in modeling, as they may not be fully independent from one another. Indeed, bodyChartCt and numLines, the number of distinct lines in the body, are nearly similar variables. However, given we are using recursive partioning with rpart, collinearity issues are usually rectified. The splitting algorithm is a greedy algorithm and will select the most important similar variable. We explore this further in the results section.
 
-```{r}
-cormat2<- (round(cor(emailDF2$isSpam, AsVector),2))
-cormat2 <- reshape::melt(cormat2)
-cormat2 %>% ggplot(aes(x=reorder(X2, -value), y=1, fill=value)) + geom_tile() + theme(legend.position = "bottom", axis.text.x = element_text(angle=90, vjust=-.5)) + scale_y_discrete("") + scale_x_discrete("Predictor Variable") + ggtitle("Correlation between Predictor Variables and Spam Classification")
+Given our dataset contains 16 boolean predictor variables as factors, we display a shortened chi-square matrix in Figure XX. This figure compares factor variables only, as correlation is not an appropriate metric for analyzing nominal relationships.
 
+```{r chi_sq_cats, include=FALSE, cache=TRUE, fig.height=8, fig.width=8}
 
-```
-At the individual level, the predictors that are mostly highly correlated with a Spam classification are (R>0.25):
-* perCaps
-* perHTML
-* numEnd
-* subSpamWords
+# chi-square matrix for categorical features
 
-Mild negative correlaton exists between the Spam classification and:
-* isRe
-* isinReplyTo
-* forwards
-* isWrote
+Dat <- AsVector[, bools]
 
-```{r fig.width=8.5, fig.height=4}
-emailDF2 %>% gather(Predictor, Value, 2:ncol(emailDF2)) %>% 
-  filter(Predictor %in% c("isRe", "numEnd", "subSpamWords", "isInReplyTo", "isWrote")) %>%
-  ggplot(aes(x=isSpam)) + geom_bar() + facet_grid(Value~Predictor) + theme_light() + ggtitle("High Absolute  Boolean Predictor Variables", subtitle = "Y Axis Faceting Shows True or False for Predictor") + scale_y_continuous("Count", labels =comma) + scale_x_discrete("Is Spam - True or False")
-```
+combos <- combn(ncol(Dat), 2)
 
-As described earlier, we know that the majority of observations in the overall dataset are classified False for the "IsSpam" indicator.  For the three predictors that found a negative Correlation between the predictor and the "IsSpam" classification - isRe, isinReplyTo, and isWrote - nearly all "TRUE" occurrences of isSpam are "FALSE" for the predictor variable.  For the Other two predictor variables - numEnd, and subSpamWords - there are some occurrences of Spam in both TRUE and FALSE cases for the predictor variable, but TRUE cases of the predictor variable have more cases of Spam than not Spam.  
+chisqres <- adply(combos, 2, function(x) {
+  test <- chisq.test(Dat[, x[1]], Dat[, x[2]])
 
-```{r fig.width=8.5, fig.height=4}
-emailDF2 %>% gather(Predictor, Value, 2:ncol(emailDF2)) %>% 
-  filter(Predictor %in% c("forwards",   "perCaps", "perHTML")) %>%
-  ggplot(aes(x=isSpam, y=Value)) + geom_boxplot() + facet_wrap(~Predictor, scales = "free_y", ncol=4) + theme_light() + ggtitle("High Absolute Correlation Continous Predictor Variables") + scale_x_discrete("Is Spam - True or False")
+  out <- data.frame("Row" = colnames(Dat)[x[1]]
+                    , "Column" = colnames(Dat[x[2]])
+                    , "Chi.Square" = round(test$statistic,3)
+                    ,  "df"= test$parameter
+                    ,  "p.value" = round(test$p.value, 3)
+                    )
+  return(out)
 
+})  
+
+chisqres %>% 
+  ggplot(aes(x=Row, y=Column, fill=p.value)) + 
+  geom_tile() + 
+  theme(legend.position = "bottom", 
+        axis.text.x = element_text(angle=90, vjust=0.5)) +
+        scale_y_discrete("") + scale_x_discrete("Predictor Variable") + 
+        ggtitle("Figure X: Chi Square Independence between Boolean Predictor Variables")
 
 ```
-Considering the continous predictors with either high negative or positive correlation, we can clarify our view of what might consititute spam.  The predictor variable "forwards" shows a more concentrated distribution of values - mostly from 0-15 for occurrences of Spam versus the full range of 0-100 for Not Spam.  The predictor variable perCaps is different - with Spam cases showing a wider interquartile range of 10-20, versus non-spam cases showing a highly limited interquartile range around 10.  The third continuous variable, perHTML, with a high correlation shows an interquartile range in Spam cases from 0 to 38, versus a very narrow interquartile range for not Spam cases near 0.
 
-Examination of these predictor variables with high and low negative correlations give some perspective to how we should expect the models to split the data on the predictor variables, but we can also expect that some of the lower correlation variables might be involved in the decision of Spam versus Not Spam as well, perhaps providing some finer detailed distinctions between the two classes.
+Obviously, significant dependence between variables exists. This makes logical sense for variables such as isWrote, which indicates if an email is electronically scribed. Since the majority of emails are electronically scribed, we can assume this variable is not as important for predicting spam or ham. Other interesting relationships in Figure X, such as the independence between priority and noHost indicate that these variables may be useful separately for analysis. We visually inspect both continuous and factor variable relationships with isSpam in the next section.
 
-#### rpart Model Comparison
+#### Response Variable Relationships
 
-We explore the effect of rpart's control parameters on classifying spam emails by fitting a default rpart model and comparing it to a separate, optimized rpart model. Specifically, we explore four different parameters: complexity penalty (cp), minsplit, maxdepth, and the splitting criteria. Table XX provides a description for each of these parameters. 
+As described earlier, we know that the majority of observations in the overall dataset are classified as spam. However, we can visualize spam and ham separation for factor and continuous predictors using different techniques. 
 
-Table XX
-cp  - A scaled complexity penalty that ranges from 0 to 1. In a classification setting, cp is compared against the error rate relative to a previous split. Any split that does not decrease the overall lack of fit by cp is not considered.
+We inspect five factor variables visually to determine viability for spam prediction: isRe, isinReplyTo, and isWrote. The variable subSpamWords is a boolean that is true when a known spam word is contained in the subject. For instance, the word "viagra" is in the subject line. Nearly all occurrences of spam occur when these factors are set to false. On the other hand, we know that mostly valid emails (ham) occur when these variables' factors are set to true. 
 
-minsplit - the minimum number of observations that must exist in a node in order for a split to be attempted.
-
-maxdepth - The maximum depth of any node of the final tree, with the root node counted as depth 0. 
-
-splitting criteria - gini or information. Gini utilizes the gini index to optimize split points, information uses entropy and information gain.
-
-Utilizing the full listing of variables in our email dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous splits. Applying the first three parameters previously mentioned typically reduces the size of the final tree. This reduction in variance should help with model generalization to the test dataset. 
-
-While rpart contains other control parameters, they are used primarily for exploratory purposes (xx reference). However, one point of clarification regarding the parameter xval is warranted. The parameter xval allows a user to optimize the cost penalty (cp) for a tree in a k-fold cross-validation setting. Given rpart does not allow for the tuning of multiple parameters simultaneously, we instead rely on the mlr package (xx reference) for cross-validation and tuning. 
-
-We use 80 percent of the email data for training and 20 percent for testing. Spam represents roughly 25 percent of the emails in our original dataset. Therefore, we stratify the observations in our train and test datasets to maintain the original spam/ham ratio. For example, of the 20 percent of data held for testing, 25 percent is made up of spam. We do not explore weighting over oversampling procedures in our analysis. 
-
-Additionally, we seek to maximize the true positive classification rate where "spam" is our positive class. We do this by selecting area under the ROC curve (AUC) as our performance metric. A false positive means an important email may end up in spam or deleted. A false negative means the user may experience unfiltered messages that should be in the spam folder. We consider the former situation a more severe model error.
-
-In order to explore the effect of rpart parameters mentioned previously, we first fit an rpart model using all 29 features and default model parameters. Default parameters for rpart consist of a minsplit of 20, a complexity paramer (cp) of 0.01, maxdepth of 30 and the gini index for splitting purposes.
-
-isSpam ~ ., ma
-
-We retain the initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward.
-
-For comparison purposes, an optimized model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. Each combination of parameters in Table XX below is tested via cross-validation. The mean AUCs for all model and associated parameters are compared and the model with the highest cross-validated AUC is chosen.
-
-table list of discrete vars here
-
-The base rpart model with default parameters is then subsequently compared to the optimized model given the test data set.
-
-
-## Results
-
-### Base Model Results
-show model var importance here
-
-show top 2 classification bounds viz
-
-
-### Optimized Model Results
-
-show hyperparam effects viz (iter and heatmaps)
-
-
-### Model Comparisons
-
-conclude
-show performance results
-show ROC curve
-
+<<<<<<< HEAD
 ## Conclusions and Future Work
 Supreme Court Justice Potter Stewart is famously credited with the quotation: "But I know it when I see it."[1]  In the context that he was in, Justice Stewart was referencing a film that was thought to be outside the standards of decency accepted in the era of the 1960's.  In the present day, most internet and mobile phone users could also apply it to the subject of spam, or commercial, unsolicited e-mail: they know it when they see it.
 
@@ -165,76 +212,76 @@ Early efforts at filtering spam were centered on the assumed validity of identit
 Google, via it's gmail product, as well as other providers, have had an ample data set over the past several years.  All have searched for algorithms that reduce the number of false positives (labeled as spam, when it's actually not spam) and false neagetives (labeled as not spam, when it actually is spam).  
 
 The value of intercepting spam communications, across mediums, is also growing.  Most mobile phone numbers have experienced the spoofed-number attack, where a number similar to your own places a call with a robot caller on the opposite end.  A number of smart phone applications are currently trying to address this problem by machine learning.  Likewise, SMS text messaging spam also provides a risk to users of mobile phones.  In both cases, the originator of the call or message is not the number that is listed on the phone.
+=======
+```{r fig.width=8.5, fig.height=4}
+>>>>>>> 77bb676df0c89eaad0aec406b602359f3fdaeab8
 
-## References
+emailDFrp[, c(1,which(bools)+1)] %>% 
+  gather(Predictor, Value, 2:ncol(emailDFrp[,c(1, which(bools)+1)])) %>% 
+    filter(Predictor %in% c("isRe", "numEnd", "subSpamWords", "isInReplyTo", "isWrote")) %>%
+      ggplot(aes(x=isSpam)) + 
+      geom_bar() + 
+      facet_grid(Value~Predictor) + 
+      theme_light() + 
+      ggtitle("Figure XX: Boolean Predictor Variables Outcomes", 
+               subtitle = "Y Axis Faceting Shows Spam or Ham for Each Predictor") +       
+    scale_y_continuous("Count", labels =comma) + 
+    scale_x_discrete("Is Spam - True or False")
+```
 
+<<<<<<< HEAD
 https://cran.r-project.org/web/packages/rpart/rpart.pdf
 https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf
 https://stats.stackexchange.com/questions/191842/how-does-the-complexity-parameter-correspond-to-the-number-of-splits-in-cross-va
 [1] https://scholar.google.com/scholar_case?case=15356452945994377133
 [2]
+=======
+There are occurences of spam emails in both boolean statuses for factor predictor variables numEnd, and subSpamWords. However, the true cases of each predictor variable have more cases of spam than not spam. 
 
+We can easily identify separation of classes for numeric variables by looking at log values in a box plot. We inspect each numeric value in Figure XX.
 
-```{r setup, include=FALSE, cache=TRUE}
-dir <- "~/DataScience/SMU/QTW/Unit10/CaseStudy/"
-setwd(dir)
-knitr::opts_knit$set(root.dir = dir)
-knitr::opts_chunk$set(echo = FALSE)
+```{r include = TRUE, cache = TRUE, fig.width=8.5, fig.height=4}
+emailDFrp[,c(1, which(nums)+1)] %>% 
+  gather(Predictor, Value, 2:ncol(emailDFrp[,c(1, which(nums)+1)])) %>% 
+    #filter(Predictor %in% c("forwards",   "perCaps", "perHTML")) %>%
+      ggplot(aes(x=isSpam, y=log(1+Value))) + 
+      geom_boxplot() + 
+      facet_wrap(~Predictor, scales = "free_y", ncol=4) + 
+      theme_light() + 
+      ggtitle("Figure XX: Continous Predictor Variables Outcomes") + 
+      scale_x_discrete("Spam or Ham")+
+      ylab("Log Value")
 ```
+>>>>>>> 77bb676df0c89eaad0aec406b602359f3fdaeab8
 
-```{r load_libs, include=FALSE, cache=TRUE}
-library(magrittr)
-library(dplyr)
-library(plyr)
-library(tidyr)
-library(ggplot2)
-library(tm)
-library(rpart)
-library(caret)
-library(mlr)
-library(parallelMap)
-library(doParallel)
-library(missForest)
-```
+We can visually inspect continuous predictors in order to identify variable importance. The predictor variable "forwards", which entails how many times an email has been forwarded, shows a more concentrated distribution of values in the third quartile for ham messages. The predictor variable perCaps is different - with spam cases showing a wider interquartile range. We also know from the boxplot that the median perCaps value for spam messages is higher than ham messages. Also, roughly 75 percent of ham messages have a perCaps value lower than the median perCaps value for spam messages. PerHTML (percent of HTML in email body) also provides for a decent classification variable, with the majority of the log range occurring for spam predictions.
 
-```{r make, include=FALSE, cache=TRUE, eval=FALSE}
-# get and clean data
-source("src/make.R")
-```
+Examination of these predictor variables gives some idea of how we should expect the rpart model to determine splits. However, we can also expect that some of the lower correlation variables might be involved in the decision of spam versus not spam as well, perhaps providing some finer detailed distinctions between the two classes. We use rpart in the next section to determine which variables are the most important for splitting.
 
-```{r eda, include=FALSE}
+#### Variable Selection and rpart Model Comparison
 
-# basic EDA stuff
-isSpamLabels <- emailDF$isSpam
+We explore variable selection and the effect of rpart's control parameters on classifying spam emails by fitting a default rpart model and comparing it to a separate, optimized rpart model. Specifically, we explore four different parameters: complexity penalty (cp), minsplit, maxdepth, and the splitting criteria. Table XX provides a description for each of these parameters. 
 
-boxplot(log(1+emailDF$perCaps) ~emailDF$isSpam)
-qqplot((1+log(emailDF[emailDF$isSpam==TRUE,]$perCaps)), (1+log(emailDF[emailDF$isSpam==FALSE,]$perCaps)))
-table(emailDF$numAtt, emailDF$isSpam)
+Table XX
+* cp  - A scaled complexity penalty that ranges from 0 to 1. In a classification setting, cp is compared against the error rate relative to a previous split. Any split that does not decrease the overall lack of fit by cp is not considered.
+* minsplit - the minimum number of observations that must exist in a node in order for a split to be attempted.
+* maxdepth - The maximum depth of any node of the final tree, with the root node counted as depth 0. 
+* splitting criteria - gini or information. Gini utilizes the gini index to optimize split points, information uses entropy and information gain.
 
-# spam typically has no reply.
-colM = c("#E41A1C80", "#377EB880")
-isRe = factor(emailDF$isRe, labels=c("no Re:", "Re:"))
-mosaicplot(table(isSpamLabels, isRe), main ="", xlab="", ylab="", color=colM)
+Utilizing the full listing of variables in our email dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous variable splits. Applying the first three parameters in table XX typically reduces the size of the final tree. This reduction in variance can help with model generalization to the test dataset. 
 
-# from email ending in numbers, ham usually has no ending #
-fromNE = factor(emailDF$numEnd, labels=c("No #", "#"))
-mosaicplot(table(isSpamLabels, fromNE), color=colM, main="", xlab="", ylab="")
+While rpart contains other control parameters, they are used primarily for exploratory purposes (xx reference). However, one point of clarification regarding the parameter xval is warranted. The parameter xval allows a user to optimize the cost penalty (cp) for a tree in a k-fold cross-validation setting. Given rpart does not allow for the tuning of multiple parameters simultaneously, we instead rely on the mlr package (xx reference) for cross-validation and tuning. 
 
-# insert correlation matrix here for numerics?
-# ANOVAs for comparing categorical and numeric?
-# chi squared tests for categorical features independence from one another?
-# LVQ for selecting optimal features in general?
+We use 80 percent of the email data for training and 20 percent for testing. Spam represents roughly 25 percent of the emails in our original dataset. Therefore, we stratify the observations in our train and test datasets to maintain the original spam/ham ratio. For example, of the 20 percent of data held for testing, 25 percent is made up of spam. We do not explore weighting over oversampling procedures in our analysis. 
 
-```
+Additionally, we seek to maximize the true positive classification rate where "spam" is our positive class. We do this by selecting area under the ROC curve (AUC) as our performance metric. A false positive means an important email may end up in spam or deleted. A false negative means the user may experience unfiltered messages that should be in the spam folder. We consider the former situation a more severe model error.
 
-```{r fit_dtree, include=FALSE}
-# set seed for reproducibility
-set.seed(418910) 
+In order to explore the effect of rpart parameters mentioned previously, we first fit an rpart model using all 29 features and default model parameters. Default parameters for rpart consist of a minsplit of 20, a complexity paramer (cp) of 0.01 and a maxdepth of 30. The Gini index is used as the splitting criterion by default.
 
-# rename and relevel vars for better interpretation
-emailDFrp$isSpam <- emailDFrp$isSpam %>% 
-                      revalue(c("T"="Spam", "F"="Ham")) %>% 
-                        relevel("Spam")
+We retain this initial fit on the full training set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward. However, as previously stated, we are interested in the variables rpart considers the most important for splitting. We can easily accomplish this with rpart package methods. Figure XX shows the variables our base model considers the most important for classification.
+
+```{r fit_dtree_base, include=TRUE}
+
 
 # get counts to prep for train/test split
 spam <- emailDFrp$isSpam == "Spam"
@@ -245,16 +292,6 @@ numHam <- sum(!spam)
 testSpamIdx <- sample(numSpam, size = floor(numSpam/5))
 testHamIdx <- sample(numHam, size = floor(numHam/5))
 
-# impute missing vals based on forest classification 
-# and regression
-registerDoParallel(cores=4)
-df <- missForest(emailDFrp, 
-                 maxiter=5, 
-                 ntree=100, 
-                 parallelize = c('forests'),
-                 variablewise = TRUE)
-
-emailDFrp <- df$ximp
 
 # pull together stratified train and test sets with training 80 pct
 testDF <- 
@@ -273,40 +310,87 @@ spam.tsk = makeClassifTask(id = "spam",
                            data = trainDF, 
                            target = "isSpam")
 
-print(spam.tsk)
-getTaskNFeats(spam.tsk)
-getTaskClassLevels(spam.tsk)
+#print(spam.tsk)
+#getTaskNFeats(spam.tsk)
+#getTaskClassLevels(spam.tsk)
 
 # Create the learner from embedded libraries
 spam.lrn = makeLearner( cl = "classif.rpart",# use rpart algorithm, gini index is default for splitting
                         id ="spam", # give it an id
                         fix.factors.prediction = TRUE, # control for missing class if any)
                         predict.type = 'prob') # to get probabilities
-print(spam.lrn)
+#print(spam.lrn)
 
 # focus on maxdepth, cp and minsplit
 # show defaults - cp = 0.01, minsplit=20, maxdepth=30
-getParamSet(spam.lrn) 
+#getParamSet(spam.lrn) 
 
 # what types of predictions
-spam.lrn$predict.type
-spam.lrn$par.set
+#spam.lrn$predict.type
+#spam.lrn$par.set
 
 # fit with defaults, cp = 0.01
 spam.clf <- mlr::train(spam.lrn, spam.tsk)
 splits <- getLearnerModel(spam.clf)
 # check out CP, default gini index
-summary(splits)
+#summary(splits)
 
 # which variables are most important?
 dat <- data.frame(vars=names(splits$variable.importance), 
                   importance=splits$variable.importance)
 
+# plot the feature importances
 ggplot(dat, aes(reorder(vars, importance, sum), importance))+
     coord_flip()+
-    geom_col()
+    geom_col()+
+    ggtitle("Figure XX: Feature Importance")+
+    xlab("Feature Splits")
+```
 
-#barchart(sort(splits$variable.importance))
+At the top of the variable importance list is perCaps, or the percentage of capital alpha characters in the body. Importance represents a weighted sum of improvement in split impurity. The perCaps variable overshadows all other variables from an importance standpoint. Indeed, we saw good separation of spam and not spam in the previous section for this variable. We are able to classify 77 percent of all spam messages based on a split value of 13 percent for perCaps. In this case, the model predicts non-spam when a message contains less than 13 percent capitals. Additionally, we see email from addresses ending in numeric (numEnd) and priority provide little value for spam classification. 
+
+Now that we've explored variable importances, we tackle our objective of exploring key parameters and fitting an optimized model. For comparison purposes, an optimized rpart decision tree model is also fit on the training data set. Optimization is achieved by exploring a discrete list of the four parameters of interest. A grid search method is used with ten-fold stratified cross-validation. Each combination of parameters below is tested via cross-validation. The mean AUCs for all models and associated parameters are compared and the model with the highest cross-validated AUC is chosen as our optimized model.
+
+Parameter Search Criteria
+*complexity parameter (cp) - 0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5,
+*minsplit - 1, 5, 10, 15, 20, 30, 40,
+*maxdepth - 2, 5, 7, 10, 15, 20, 30, 40
+*splitting criterion - gini, information
+
+The base rpart model with default parameters is then subsequently compared to the optimized model given the test data set. We explore model performance and comparisons in the next section.
+
+## Results
+
+### Base Model Results
+Given our base model variable imp
+
+show top 2 classification bounds viz
+confusion matrix
+
+
+### Optimized Model Results
+
+show hyperparam effects viz (iter and heatmaps)
+
+
+### Model Comparisons
+
+conclude
+show performance results
+show ROC curve
+
+## Conclusions and Future Work
+
+## References
+
+https://cran.r-project.org/web/packages/rpart/rpart.pdf
+https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf
+https://stats.stackexchange.com/questions/191842/how-does-the-complexity-parameter-correspond-to-the-number-of-splits-in-cross-va
+
+
+
+
+```{r}
 
 spam.pred <- predict(spam.clf, newdata =  testDF)
 listMeasures(spam.tsk)
