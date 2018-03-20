@@ -258,7 +258,7 @@ In summary, highly correlated predictor variables could be extraneous to our obj
 
 As described earlier, we know that the majority of observations in the overall dataset are classified as spam. However, we can visualize the separation between spam and valid emails for factor and continuous predictors using different plotting techniques. 
 
-First, we inspect five factor variables to determine viability for spam prediction: isRe, numEnd, subSpamWords, and isWrote. The variable numEnd indicates whether or not the "from" email prefix ends with a number. For example, "Greer5769@yahoo.com" would be classified as true for numEnd.
+First, we inspect four factor variables to determine viability for spam prediction: isRe, numEnd, subSpamWords, and isWrote. The variable numEnd indicates whether or not the "from" email prefix ends with a number. For example, "Greer5769@yahoo.com" would be classified as true for numEnd.
 
 ```{r bool_impact, include=TRUE, echo=FALSE, fig.width=8.5, fig.height=4}
 
