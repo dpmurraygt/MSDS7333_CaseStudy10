@@ -87,19 +87,19 @@ In the subsquent section, we review research literature and introduce the email 
 
 ## Background
 
-In their paper from the Hawaii International Conference on System Sciences, Cukier and Cody define spam as "including all electronic messages that are unsolicited or unwanted, sent to many users (in bulk), without regard to the identity of the individual user, and usually having commercial purposes" (1). Spam also includes messages containing attachments that spread viruses through emails. They state that in 2002, spam numbers peaked at one in three email messages. Also, in 2003, approximately 20 billion spam messages were sent daily [1].
+In their paper from the Hawaii International Conference on System Sciences, Cukier and Cody define spam as "including all electronic messages that are unsolicited or unwanted, sent to many users (in bulk), without regard to the identity of the individual user, and usually having commercial purposes" (1). Spam also includes messages containing attachments that spread viruses through emails. They state that in 2002, spam numbers peaked at one in three email messages. Also, in 2003, approximately 20 billion spam messages were sent daily.
 
-Clearly, spam has become a major problem for users, businesses, and the internet in general, which led to the introduction of spam filters. These filters have historically relied on keywords within the message to identify spam. Some of the methods used include list-based filters which classify the sender, content-based filters, challenge/response systems, and collaborative filters where users report spam messages which are stored in a database (2).
+Clearly, spam has become a major problem for users, businesses, and the internet in general, which led to the introduction of spam filters. These filters have historically relied on keywords within the message to identify spam. Some of the methods used include list-based filters which classify the sender, content-based filters, challenge/response systems, and collaborative filters where users report spam messages which are stored in a database (Jha 2).
 
-Many researchers in academia focus on creating a web spam taxonomy to prevent spam from spreading. The literature goes into the different types of spamming and the way it is used to collect information from the users. But as spam detection improves, so does the spammers' techniques to send spam (3).
+Many researchers in academia focus on creating a web spam taxonomy to prevent spam from spreading. The literature goes into the different types of spamming and the way it is used to collect information from the users. But as spam detection improves, so does the spammers' techniques to send spam (Takhmiri et. al, 3).
 
 There are many types of classification methods to detect spam. Statistical methods such as support vector machines, naïve bayes classifiers, and decision trees have commonly been used. The latter is the method used in this project. 
 
-A decision tree is a graph used to model outcomes based on a given set of rules. It can be used to classify unlabeled data (4), such as the dataset of emails we use in this case study to identify spam. In our case, we utilize rpart, a recursive partitioning package in R. Recursive partitioning is a statistical method that outputs a decision tree. Regression and classification tasks can be executed using recursive partitioning. The rpart package is one of the most commonly used packages for machine learning in R. It implements the classic non-parametric CART algorithm, using the Gini index as a default splitting criteria. The package also contains a number of optional parameters which can be tuned to optimize model performance. We introduce these parameters in the methods section.
+A decision tree is a graph used to model outcomes based on a given set of rules. It can be used to classify unlabeled data (Song 4), such as the dataset of emails we use in this case study to identify spam. In our case, we utilize rpart, a recursive partitioning package in R. Recursive partitioning is a statistical method that outputs a decision tree. Regression and classification tasks can be executed using recursive partitioning. The rpart package is one of the most commonly used packages for machine learning in R. It implements the classic non-parametric CART algorithm, using the Gini index as a default splitting criteria. The package also contains a number of optional parameters which can be tuned to optimize model performance. We introduce these parameters in the methods section.
 
 ### Data Description
 
-The dataset used for our analysis task is made up of a corpus of emails from SpamAssassin.org (Apache ). In total, there are 9348 unique emails. It contains 29 predictor variables and one response variable named isSpam. Of the 30 total variables, 17 are boolean factor variables and the remaining 13 variables are numeric variables. Each email has been previously classified as spam or valid. We will use these predictor variables and the isSpam response to create two rpart decision tree models. A high level listing of variable names is given in Table 1.
+The dataset used for our analysis task is made up of a corpus of emails from SpamAssassin.org (Apache 4). In total, there are 9348 unique emails. It contains 29 predictor variables and one response variable named isSpam. Of the 30 total variables, 17 are boolean factor variables and the remaining 13 variables are numeric variables. Each email has been previously classified as spam or valid. We will use these predictor variables and the isSpam response to create two rpart decision tree models. A high level listing of variable names is given in Table 1.
 
 Table 1: Variable Listing
 *Numeric vars - perCaps, bodyChartCt, numLines, subExcCt, subQuesCt, numAtt, numRec, hour, perHTML, subBlanks, forwards, avgWordLen, numDlr
@@ -376,7 +376,7 @@ Table 2
 
 Utilizing the full listing of variables in our email dataset can lead to overfitting, however, decision trees allow us to find the best variables for splitting while pruning extraneous variable splits. Applying the first three parameters in Table 2 typically reduces the size of the final tree. This reduction in size can help with model generalization to the test dataset. 
 
-The rpart package contains other control parameters used primarily for exploratory purposes (xx reference). However, one point of clarification regarding the parameter xval is warranted. The parameter xval allows a user to optimize the cost penalty (cp) for a tree with k-fold cross-validation. Given rpart does not allow for the tuning of multiple parameters simultaneously, we instead rely on the mlr package (xx reference) for cross-validation and tuning. The mlr package provides a broad toolset for machine learning tasks in R. It is mainly a wrapper for other machine learning packages and provides fantastic utilities to automate tedious tasks in a machine learning workflow.
+The rpart package contains other control parameters used primarily for exploratory purposes (Atkinson 6). However, one point of clarification regarding the parameter xval is warranted. The parameter xval allows a user to optimize the cost penalty (cp) for a tree with k-fold cross-validation. Given rpart does not allow for the tuning of multiple parameters simultaneously, we instead rely on the mlr package (Bischl 7) for cross-validation and tuning. The mlr package provides a broad toolset for machine learning tasks in R. It is mainly a wrapper for other machine learning packages and provides fantastic utilities to automate tedious tasks in a machine learning workflow.
 
 #### Hyperparameter Optimization
 
@@ -609,14 +609,27 @@ As e-mail filtering continues to move in the direction of machine learning, deve
 
 ## References
 
-http://spamassassin.apache.org
+1. Cukier, W.L., and S. Cody. “Genres of Spam: Expectations and Deceptions.” IEEE Conference Publication, 4 Jan. 2006,     
+   ieeexplore.ieee.org/document/1579391/.
+   
+2. Jha, K. “Comparison of Naïve Bayes Classifier, Decision Tree and an ANN for the Purpose of Spam Detection.” Wisconsin.edu,       
+   homepages.cae.wisc.edu/~ece539/fall13/project/Jha_rpt.pdf.
 
-1. Nolan, D., Temple Lang, D. DATA SCIENCE IN R: a Case Studies Approach to Computational Reasoning and Problem Solving. CRC PRESS, 2017.
+3. Takhmiri, H., and A. Haroonabadi. “Identifying Valid Email Spam Emails Using Decision Tree.” International Journal of Computer Applications 
+   Technology and Research, vol. 5, no. 2, 5 Feb. 2004, ijcat.com/archives/volume5/issue2/ijcatr05021004.pdf.
+
+4. Song, L. “EMAIL SPAM DETECTION USING MACHINE LEARNING.” EMAIL SPAM DETECTION USING MACHINE LEARNING, 
+   ese.wustl.edu/ContentFiles/Research/UndergraduateResearch/CompletedProjects/WebPages/sp14/SongSteimle/WebPage/classifiers.html.
+
+5. “SpamAssassin.” Apache, spamassassin.apache.org/.
+
+6. Atkinson, Beth, et al. “Package 'Rpart'.” Cran.r-Project.org, cran.r-project.org/web/packages/rpart/rpart.pdf.
+
+7. Bischl, Bernd, et al. “Machine Learning in R.” Mlr Tutorial, 7 Mar. 2018, mlr-org.github.io/mlr-tutorial/release/html/.
+
+8. Nolan, D., Temple Lang, D. DATA SCIENCE IN R: a Case Studies Approach to Computational Reasoning and Problem Solving. CRC PRESS, 2017.
 
 
-https://cran.r-project.org/web/packages/rpart/rpart.pdf
-https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf
-https://stats.stackexchange.com/questions/191842/how-does-the-complexity-parameter-correspond-to-the-number-of-splits-in-cross-va
 
 
 
