@@ -65,6 +65,15 @@ In the subsquent section, we review research literature to catalogue spam filter
 
 ## Literature Review
 
+In their paper from the Hawaii International Conference on System Sciences, Cukier and Cody define spam as "including all electronic messages that are unsolicited or unwanted, sent to many users (in bulk), without regard to the identity of the individual user, and usually having commercial purposes" [1]. Spam also includes messages containing attachments that spread viruses through emails. They state that in 2002, spam numbers peaked at one in three email messages. Also, in 2003, approximately 20 billion spam messages were sent daily [1]. 
+
+Clearly, spam has become a major problem for users, businesses, and the internet in general, which led to the introduction of spam filters. These filters have historically relied on keywords within the message to identify spam. Some of the methods used include list-based filters (classifies the sender), content-based filters (uses words within the message), challenge/response system (sender needs to complete an extra task before the message can be delivered), and collaborative filters (users report spam messages which are stored in a database) [2]. 
+
+Many in academia focus on creating a web spam taxonomy to prevent spam from spreading. The literature goes into the different types of spamming and the way it is used to collect information from the users. But as spam detection improves, so does the spammers' techniques to send spam [3]. 
+
+There are many types of classification methods to detect spam, some of which include support vector machines, naïve bayes classifiers, and decision trees. The latter is the method used in this project. A decision tree algorithm is a tree-like graph used to model decisions and their consequences based on a given set of rules. It can be used to classify unlabeled data [4], such as the dataset of emails we use in this case study to identify spam. 
+
+
 ## Methods
 
 Prior to fitting decision trees using rpart, we introduce and explore the email dataset in its totality. Specifically, predictor variable relationships are examined using correlation and independence methods. Relationships of predictor variables to the response variable are also investigated visually. We also introduce variable importance, an rpart method that will allow us to efficiently determine optimal variables to use for splitting a decision tree.
@@ -604,9 +613,17 @@ As e-mail filtering continues to move in the direction of machine learning, deve
 
 ## References
 
-http://spamassassin.apache.org
+1. https://pdfs.semanticscholar.org/d33b/32c05d7483fb6dae0ad8b43b5a7048f36b08.pdf
 
-1. Nolan, D., Temple Lang, D. DATA SCIENCE IN R: a Case Studies Approach to Computational Reasoning and Problem Solving. CRC PRESS, 2017.
+2. http://homepages.cae.wisc.edu/~ece539/fall13/project/Jha_rpt.pdf
+
+3. http://ijcat.com/archives/volume5/issue2/ijcatr05021004.pdf
+
+4. https://ese.wustl.edu/ContentFiles/Research/UndergraduateResearch/CompletedProjects/WebPages/sp14/SongSteimle/WebPage/classifiers.html
+
+5. http://spamassassin.apache.org
+
+6. Nolan, D., Temple Lang, D. DATA SCIENCE IN R: a Case Studies Approach to Computational Reasoning and Problem Solving. CRC PRESS, 2017.
 
 
 https://cran.r-project.org/web/packages/rpart/rpart.pdf
