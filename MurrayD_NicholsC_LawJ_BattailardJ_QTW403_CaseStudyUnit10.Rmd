@@ -131,8 +131,8 @@ A preliminary evaluation of the dataset found missing observations in 303 unique
 
 Rather than discard over three percent of the dataset, we undertake imputation using random forest regression and classification methods for both numeric and categorical predictor variables.
 
-```{r dataset_bal, include=TRUE, echo=FALSE, fig.height=3.5, fig.width=8.5}
-# get dataset balance
+```{r dataset_bal, include=TRUE, echo=FALSE, fig.height=3, fig.width=8.5}
+# get dataset balance, show via barchart
 emailDFrp %>% 
   group_by(isSpam) %>% 
     dplyr::summarise(Count=n()) %>% 
@@ -142,7 +142,8 @@ emailDFrp %>%
       ggtitle("Figure 1: Spam vs. Non-Spam Split") + 
       scale_y_continuous("Count", labels =comma, limits=c(0,7500)) + 
       scale_x_discrete("Response Variable Category")  + 
-      geom_text(vjust=-0.5)
+      geom_text(vjust=-0.5)+
+      theme(text=element_text(size=14))
 ```
 
 Our dataset is unbalanced, with 2,371 (26%) spam emails, and 6,674 (74%) valid emails. This imbalance in the dataset could introduce higher false negative rates for our analysis task. However, given the unbalance is not egregious, oversampling methods will not be introduced in this case.
@@ -151,7 +152,7 @@ Our dataset is unbalanced, with 2,371 (26%) spam emails, and 6,674 (74%) valid e
 
 Considering with our imputed dataset, the correlation matrix in Figure 2 reveals several significant positive correlations between numerical predictors.
 
-```{r cor_mat, include=TRUE, cache=TRUE, echo=FALSE, fig.height=8, fig.width=8}
+```{r cor_mat, include=TRUE, cache=TRUE, echo=FALSE, fig.height=7, fig.width=8.5}
 
 # build correlation matrix
 AsVector <- emailDFrp[, c(2:30)]
@@ -164,16 +165,19 @@ cormat <- (round(cor(AsVector[, nums]), 2))
 cormat[lower.tri(cormat, diag=TRUE)] <- NA
 cormat <- reshape2::melt(cormat, na.rm = TRUE)
 
+# plot correlation matrix
 cormat %>% ggplot(aes(x=Var1, y=Var2, fill=value)) + 
            geom_tile() + 
            geom_text(aes(Var1, Var2, label = value), color = "white", size = 4)+
-           theme(legend.position = "bottom", 
+           theme(legend.position = "right", 
                  axis.text.x = element_text(angle=90, 
                                             vjust=-.5),
-                 legend.text=element_text(size=8)) + 
+                 legend.text=element_text(size=10),
+                 text=element_text(size=14)) + 
            scale_x_discrete("") + 
            scale_y_discrete("") + 
-           ggtitle("Figure 2: Correlation Between Numeric Predictor Variable Pairs")
+           ggtitle("Figure 2: Correlation Between Numeric Predictor Variable Pairs")+
+           guides(fill=guide_legend(title="Correlation"))
 ```
 
 
@@ -187,14 +191,16 @@ The higher correlation between predictor variables could cause these variables t
 
 Given our dataset contains 16 boolean predictor variables, we display a Fisher's exact p-value matrix in Figure 3. This figure shows the resulting p-values for dichotomous variables only. Correlation is not an appropriate metric for analyzing nominal or dichotomous relationships. Fisher's exact test allows us to non-parametrically examine the association between our categorical variables. It also allows us to account for small numbers of observations for certain variable frequency counts.
 
-```{r fisher_cats, include=TRUE, cache=TRUE, echo=FALSE, fig.height=8, fig.width=8}
+```{r fisher_cats, include=TRUE, cache=TRUE, echo=FALSE, fig.height=7, fig.width=8.5}
 
-# chi-square matrix for categorical features
-
+# fisher exact matrix for categorical features
+# get booleans
 Dat <- AsVector[, bools]
 
+# source combos of each var
 combos <- combn(ncol(Dat), 2)
 
+# apply fishers to each combo and capture in df
 fishers <- adply(combos, 2, function(x) {
   test <- fisher.test(Dat[, x[1]], Dat[, x[2]])
 
@@ -208,13 +214,18 @@ fishers <- adply(combos, 2, function(x) {
 
 })  
 
+# plot fisher matrix
 fishers %>% 
   ggplot(aes(x=Row, y=Column, fill = p.value)) + 
   geom_tile() + 
   geom_text(aes(Row, Column, label = p.value), color = "white", size = 3)+
-  theme(legend.position = "bottom", 
-        axis.text.x = element_text(angle=90, vjust=0.5)) +
-        scale_y_discrete("") + scale_x_discrete("Predictor Variable") + 
+  theme(legend.position = "right", 
+        legend.text=element_text(size=10),
+        legend.title = element_text(size=10),
+        axis.text.x = element_text(angle=90, vjust=0.5),
+        text=element_text(size=14)) +
+        scale_y_discrete("") + 
+        scale_x_discrete("Predictor Variable") + 
         ggtitle("Figure 3: Fisher's Exact Test for Boolean Predictor Variables")
 
 ```
@@ -223,7 +234,9 @@ Lower p-values indicate we reject the null hypothesis of random association. Obv
 
 In order to be complete, we also visually inspect the biserial correlation between factors and continuous variables. Given our factors are all dichotomous nominal variables, biserial correlation is an appropriate measure to use when exploring relationships between nominal and continuous variables. Upon visual inspection, we are able to establish some common sense relationships.
 
-```{r biser_cor, include=TRUE, echo=FALSE, cache=TRUE, fig.height=8, fig.width=8}
+```{r biser_cor, include=TRUE, echo=FALSE, cache=TRUE, fig.height=7, fig.width=8.5}
+
+# we use biserial correlation in order to get a more accurate picture of factor v continous relationships
 # get all data except response
 Dat <- AsVector
 # identify factor and numeric vars for biserial correlation
@@ -243,10 +256,15 @@ df %>%
   ggplot(aes(x=X1, y=X2, fill=value)) + 
   geom_tile() + 
   geom_text(aes(X1, X2, label = value), color = "white", size = 3)+
-  theme(legend.position = "bottom", 
-        axis.text.x = element_text(angle=90, vjust=0.5)) +
-        scale_y_discrete("") + scale_x_discrete("Categorical Predictor Variable") + 
-        ggtitle("Figure 4: Biserial Correlation for Factor and Continuous Predictor Variables")
+  theme(legend.position = "right", 
+        legend.text=element_text(size=8),
+        legend.title = element_text(size=10),
+        axis.text.x = element_text(angle=90, vjust=0.5),
+        text=element_text(size=14)) +
+  scale_y_discrete("") + scale_x_discrete("Categorical Predictor Variable") + 
+  ggtitle("Figure 4: Biserial Correlation - Factor and Continuous Predictors")+
+  guides(fill=guide_legend(title="Correlation"))
+
 
 ```
 
@@ -262,6 +280,9 @@ First, we inspect four factor variables to determine viability for spam predicti
 
 ```{r bool_impact, include=TRUE, echo=FALSE, fig.width=8.5, fig.height=4}
 
+# which factor variables are worth splitting?
+# plot counts of each variable based on their boolean status and the counts
+# of spam and valid
 emailDFrp[, c(1,which(bools)+1)] %>% 
   gather(Predictor, Value, 2:ncol(emailDFrp[,c(1, which(bools)+1)])) %>% 
     filter(Predictor %in% c("isRe", "numEnd", "subSpamWords", "isWrote")) %>%
@@ -269,6 +290,11 @@ emailDFrp[, c(1,which(bools)+1)] %>%
       geom_bar() + 
       facet_grid(Value~Predictor) + 
       theme_light() + 
+      theme(legend.position = "bottom", 
+            legend.text=element_text(size=8),
+        legend.title = element_text(size=10),
+        axis.text.x = element_text(angle=90, vjust=0.5),
+        text=element_text(size=14))+
       ggtitle("Figure 5: Boolean Predictor Variables and Spam Outcomes", 
                subtitle = "Y Axis Faceting Shows Spam or Valid Email for Each Predictor") +       
     scale_y_continuous("Count", labels =comma) + 
@@ -277,17 +303,27 @@ emailDFrp[, c(1,which(bools)+1)] %>%
 
 The variable subSpamWords is a boolean that is true when a known spam word is contained in the subject. For instance, the word "viagra" would trigger a boolean value of true for subSpamWords. The majority of spam occurs when the four factors above are set to false. On the other hand, we know that mostly valid emails occur when isRe and isWrote are set to true. There are occurences of spam emails in both boolean statuses for factor predictor variables numEnd, and subSpamWords. However, the true cases of each predictor variable have more cases of spam than valid email. Given the splits above, we can see how a decision tree could split on different categorical variables in order to classify an email message as spam or valid.
 
-We can also identify separation of classes for numeric variables by looking at log values for each numeric predictor in a box plot. We inspect all numeric values in Figure 6.
+We can also identify separation of classes for numeric variables by looking at log values for numerics predictor in a box plot. We inspect a few interesting numeric predictors in Figure 6.
 
-```{r numeric_impact, include = TRUE, echo=FALSE, cache = TRUE, fig.width=8.5, fig.height=6}
+```{r numeric_impact, include = TRUE, echo=FALSE, cache = TRUE, fig.width=8.5, fig.height=3}
+
+# get boxplots of key numeric predictors, split by outcome status valid or spam
+
 nums <- which(lapply(emailDFrp, is.numeric) ==TRUE) 
+
+# aggregate and plot boxes
 emailDFrp[,c(1, nums)] %>% 
   gather(Predictor, Value, 2:ncol(emailDFrp[,c(1, nums)])) %>% 
-    #filter(Predictor %in% c("forwards",   "perCaps", "perHTML")) %>%
+    filter(Predictor %in% c("forwards", "perCaps", "perHTML", "numLines", 'bodyCharCt')) %>%
       ggplot(aes(x=isSpam, y=log(1+Value))) + 
-      geom_boxplot() + 
+      geom_boxplot(outlier.size=0.25, position="dodge") + 
       facet_wrap(~Predictor, scales = "free_y", ncol=5) + 
       theme_light() + 
+      theme(legend.position = "bottom", 
+            legend.text=element_text(size=8),
+            legend.title = element_text(size=10),
+            axis.text.x = element_text(angle=90, vjust=0.5),
+            text=element_text(size=14))+
       ggtitle("Figure 6: Continous Predictor Variables and Spam Outcomes") + 
       scale_x_discrete("Spam or Valid Email")+
       ylab("Log Value")
@@ -305,7 +341,9 @@ Instead of fitting complex variable selection algorithms to our email data set, 
 
 We also retain this initial fit on the training data set in order to evaluate the model's generalization capabilities on the test data set. We call this model our "base" model, and use this terminology going forward. After the rpart model is trained, the package provides us with a listing of the variables it considers the most important for splitting. We can easily identify these variables with the variable importance method contained in rpart. Figure 7 shows the variables our base model considers the most important for classification.
 
-```{r fit_dtree_base, echo=FALSE, include=TRUE, fig.height=8, fig.width=8}
+```{r fit_dtree_base, echo=FALSE, include=TRUE, fig.height=5, fig.width=8.5}
+# we fit the base rpart model in this block
+
 set.seed(4)
 
 # get counts to prep for train/test split
@@ -360,8 +398,14 @@ dat <- data.frame(vars=names(splits$variable.importance),
 ggplot(dat, aes(reorder(vars, importance, sum), importance))+
     coord_flip()+
     geom_col()+
+    theme(legend.position = "bottom", 
+            legend.text=element_text(size=8),
+        legend.title = element_text(size=10),
+        axis.text.x = element_text(angle=90, vjust=0.5),
+        text=element_text(size=14))+
     ggtitle("Figure 7: rpart Feature Importance")+
-    xlab("Feature Splits")
+    xlab("Feature Splits")+
+    ylab("Importance Value")
 ```
 
 At the top of the variable importance list is perCaps, or the percentage of capital alpha characters in the body. Importance is a weighted sum of improvement in impurity for each variable split. The perCaps variable overshadows all other variables from an importance standpoint. Indeed, we saw good separation of spam and valid email in the previous section for this variable. We are able to classify 77 percent of all spam messages based on a split value of 13 percent for perCaps. In this case, the base model predicts non-spam when a message contains less than 13 percent capitals. Additionally, we see email from addresses ending in numeric (numEnd) and priority provide little value for spam classification. Base model performance and comparisons are given in the results section.
@@ -392,7 +436,7 @@ The base rpart model with default parameters is then subsequently compared to th
 
 Our base model lists perCaps as the most important variable to split in Figure 7. In second place is BodyCharCt, which represents the number of characters in the body of the email message. Given these variables have such a higher importance value, we visually inspect an rpart model fit on our training data set using only perCaps and BodyCharCt.
 
-```{r perCaps_class, include=TRUE, echo=FALSE, fig.height=6, fig.width=8}
+```{r perCaps_class, include=TRUE, echo=FALSE, fig.height=5, fig.width=8.5}
 
 # for viz purposes, log top 2 importance, fit and predict
 trainDF$perCaps <- log(1+trainDF$perCaps)
@@ -404,6 +448,7 @@ spam.log.tsk = makeClassifTask(id = "spam",
                                data = trainDF, 
                                target = "isSpam")
 
+# plot decision regions based on top two importance vars
 g <- plotLearnerPrediction(learner = spam.lrn, 
                            task = spam.log.tsk, 
                            features=c("perCaps", "bodyCharCt"),
@@ -413,9 +458,15 @@ g <- plotLearnerPrediction(learner = spam.lrn,
                            err.size = 0.5,
                            err.mark="cv")
 
+# customize for clarity
 g+
   ggtitle('Figure 8: Body Character Count and Percent Capitals Decision Tree')+
-  theme(legend.key.size = unit(1, "cm"))+
+  theme(legend.key.size = unit(1, "cm"),
+        legend.position = "right", 
+        legend.text=element_text(size=8),
+        legend.title = element_text(size=10),
+        axis.text.x = element_text(angle=90, vjust=0.5),
+        text=element_text(size=14))+     
   guides(shape = guide_legend(override.aes = list(size = 3)))
 ```
 
@@ -423,7 +474,8 @@ We represent values on a log scale in order to provide a clean visualization of 
 
 Thus, we leave it up to rpart and its default parameters to create a decision tree containing 14 splits represented in Figure 9. This default rpart decision tree was created in the previous section. We fit this default model on the entire training data set.
 
-```{r tree_plot, include=TRUE, echo=FALSE, fig.width=8.5, fig.height=5}
+```{r tree_plot, include=TRUE, echo=FALSE, fig.width=8.5, fig.height=4}
+# print a pretty tree plot of our base rpart model
 prp(splits, 0, extra=1)
 ```
 
@@ -433,6 +485,7 @@ We utilize the test data set of emails to produce a confusion matrix and determi
 
 ```{r confusion_base, echo=FALSE, include=TRUE}
 
+# get confusion matrix for predictions on test
 spam.preds <- predict(spam.clf, newdata =  testDF)
 
 # get scores
@@ -519,12 +572,21 @@ spam.opt.clf <- mlr::train(spam.opt.lrn, spam.tsk)
 
 Each combination of parameters is cross-validated on 10 folds of the training data set using AUC as the performance metric. After the grid search and associated cross-validations are complete, the model with the best AUC performance has a complexity penalty of 0.001, a minimum split of 10, a maximum tree node depth of 15, and uses information as its splitting criterion. We can see the optimization path for our rpart model clearly by viewing the AUC score in sorted order. 
 
-```{r optimize_path, include=TRUE, echo=FALSE, fig.height=5, fig.width=8}
+```{r optimize_path, include=TRUE, echo=FALSE, fig.height=4, fig.width=8}
+
+# plot hyperparameter effects
+# this allows us to see each combination and resulting AUC performance
+# after cross-validation
 
 plotHyperParsEffect(data, x = "iteration", y = "auc.test.mean",
   plot.type = "line", partial.dep.learn = "regr.randomForest")+
   ggtitle("Figure 10: Optimization Path")+
-  ylab("Mean AUC")
+  ylab("Mean AUC")+
+  theme(legend.position = "bottom", 
+        legend.text=element_text(size=8),
+        legend.title = element_text(size=10),
+        axis.text.x = element_text(angle=90, vjust=0.5),
+        text=element_text(size=14))
 
 ```
 
@@ -532,6 +594,7 @@ Optimization begins to stall just under an AUC of 0.97 for our training data. Ou
 
 ```{r parms_look, echo=FALSE, include = TRUE}
 
+# get the actual rpart model
 splits <- getLearnerModel(spam.opt.clf)
 
 ```
@@ -540,13 +603,21 @@ Of the 29 models fit during the tuning process with a resulting cross-validated 
 
 We can easily see the complexity parameter's dominance in Figure XX below, where the mean AUC across validation splits is maximized as long as the complexity parameter remains small. 
 
-```{r cp_vs_minsplit, echo=FALSE, include=TRUE, fig.height=8, fig.width=8}
+```{r cp_vs_minsplit, echo=FALSE, include=TRUE, fig.height=5, fig.width=8.5}
+
 # plot hyper parameter effects
+# this is a partial dependence plot showing performance based on two features
+
 plotHyperParsEffect(data, x = "cp", y = "minsplit", z = "auc.test.mean",
   plot.type = "heatmap", partial.dep.learn = "regr.randomForest")+
   ggtitle("Figure 11: Hyperparameter Effects - Complexity and Minsplit")+
   ylab("Mean AUC")+
-  guides(fill=guide_legend(title="Mean AUC"))
+  guides(fill=guide_legend(title="Mean AUC"))+
+  theme(legend.position = "right", 
+            legend.text=element_text(size=8),
+        legend.title = element_text(size=10),
+        axis.text.x = element_text(angle=90, vjust=0.5),
+        text=element_text(size=14))
 
 ```
 
@@ -554,24 +625,26 @@ After thoroughly exploring rpart parameters, we turn to generalization performan
 
 ```{r final_results, echo=FALSE, include=TRUE}
 
-# results
+# results of tuned model on test set
 spam.opt.preds <- predict(spam.opt.clf, newdata = testDF)
 spam.preds <- predict(spam.clf, newdata =  testDF)
 
-
+# get performance measures
 opt<-performance(spam.opt.preds, 
             measures=list(auc, mmce, fpr, fnr))
                 
 base<-performance(spam.preds, 
             measures=list(auc, mmce, fpr, fnr))
 
+# pull them into a table
 kable(cbind(optimized = round(opt,3), base = round(base,3)))
 
 ```
 
 Our optimized model outperforms the base model on our key metric: AUC. Given our base model struggled with false negative rates, we also include false positive and false negative rates for the classification of spam email on the test data set. Our model significantly improves the false negative, false positive and misclassification error rates as well. However, no analysis using AUC would be complete without viewing an ROC curve for comparison.
 
-``` {r roc_curve, include = TRUE, echo=FALSE, fig.height=8, fig.width=8}
+``` {r roc_curve, include = TRUE, echo=FALSE, fig.height=5, fig.width=8.5}
+
 # plot ROC curves for base and optimized
 df = generateThreshVsPerfData(list(base = spam.preds, 
                                    optimized = spam.opt.preds), 
@@ -580,7 +653,12 @@ df = generateThreshVsPerfData(list(base = spam.preds,
 
 # plotROCCurves(df)
 qplot(x = fpr, y = tpr, color = learner, data = df$data, geom = "path")+
-  ggtitle("Figure 12: ROC Curves for Base and Optimized rpart Models")
+  ggtitle("Figure 12: ROC Curves for Base and Optimized rpart Models")+
+  theme(legend.position = "right", 
+            legend.text=element_text(size=8),
+            legend.title = element_text(size=10),
+            axis.text.x = element_text(angle=90, vjust=0.5),
+            text=element_text(size=14))
 
 ```
 
